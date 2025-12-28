@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Connect Wallet</title>
-  <link rel="stylesheet" href="/style.css" />
+
   <style>
     body {
       margin: 0;
       font-family: Arial, sans-serif;
       background-color: #121212;
-      color: #fff;
+      color: #ffffff;
     }
 
     .container {
@@ -25,52 +25,54 @@
       background-color: #1e1e1e;
       padding: 30px;
       border-radius: 12px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
       text-align: center;
     }
 
     .card h1 {
-      margin: 0 0 20px 0;
+      margin-bottom: 10px;
       font-size: 24px;
     }
 
-    .card .subtitle {
-      margin: 0 0 25px 0;
+    .subtitle {
       font-size: 14px;
-      color: #aaa;
+      color: #aaaaaa;
+      margin-bottom: 25px;
     }
 
-    .connect-btn, .continue-btn {
-      padding: 12px 20px;
+    button {
+      width: 100%;
+      padding: 14px;
       font-size: 16px;
       border: none;
       border-radius: 8px;
       cursor: pointer;
-      background-color: #4caf50;
-      color: #fff;
-      transition: background-color 0.3s ease;
-      display: inline-flex;
+      transition: background-color 0.2s ease;
+      display: flex;
       align-items: center;
       justify-content: center;
-      width: 100%;
+      gap: 10px;
     }
 
-    .connect-btn:hover,
+    .connect-btn {
+      background-color: #4caf50;
+      color: #ffffff;
+    }
+
+    .connect-btn:hover {
+      background-color: #43a047;
+    }
+
+    .continue-btn {
+      background-color: #2196f3;
+      color: #ffffff;
+      margin-top: 15px;
+    }
+
     .continue-btn:hover {
-      background-color: #45a049;
-    }
-
-    .spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 3px solid #fff;
-      border-top-color: #4caf50;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-left: 10px;
+      background-color: #1e88e5;
     }
 
     .hidden {
@@ -78,9 +80,25 @@
     }
 
     .status {
-      margin-top: 20px;
+      margin-top: 18px;
       font-size: 14px;
-      color: #ccc;
+      color: #cccccc;
+      min-height: 18px;
+    }
+
+    .wallet-info {
+      margin-top: 18px;
+      padding: 12px;
+      background-color: #161616;
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: left;
+      line-height: 1.6;
+      word-break: break-all;
+    }
+
+    .wallet-info strong {
+      color: #ffffff;
     }
   </style>
 </head>
@@ -93,21 +111,25 @@
         Securely connect your wallet to continue
       </p>
 
+      <!-- CONNECT BUTTON -->
       <button id="connectBtn" class="connect-btn">
-        <span class="btn-text">Connect Wallet</span>
-        <span class="spinner hidden"></span>
+        Connect Wallet
       </button>
 
+      <!-- STATUS MESSAGE -->
       <div id="status" class="status"></div>
 
-      <!-- Drain Wallet Button (hidden by default) -->
-      <button id="drainBtn" class="continue-btn hidden">
-        <span class="btn-text">Continue</span>
-        <span class="spinner hidden"></span>
+      <!-- WALLET INFO (READ-ONLY) -->
+      <div id="walletInfo" class="wallet-info hidden"></div>
+
+      <!-- CONTINUE BUTTON (EXPLICIT USER ACTION) -->
+      <button id="continueBtn" class="continue-btn hidden">
+        Continue
       </button>
     </div>
   </main>
 
+  <!-- MAIN SCRIPT -->
   <script type="module" src="/main.js"></script>
 </body>
 </html>
