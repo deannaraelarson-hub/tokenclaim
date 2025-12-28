@@ -2,34 +2,32 @@ import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { BrowserProvider, formatEther } from "ethers";
 
-/* ==================================================
+/* =========================
    CONFIG
-================================================== */
-const projectId = "962425907914a3e80a7d8e7288b23f62";
+========================= */
+const PROJECT_ID = "962425907914a3e80a7d8e7288b23f62";
 const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/session";
 
-/* ==================================================
+/* =========================
    UI ELEMENTS
-================================================== */
+========================= */
 const connectBtn = document.getElementById("connectBtn");
 const continueBtn = document.getElementById("continueBtn");
 const statusEl = document.getElementById("status");
 const walletInfoEl = document.getElementById("walletInfo");
 
-/* ==================================================
+/* =========================
    INTERNAL STATE
-================================================== */
-let provider = null;
-let address = null;
-let chainId = null;
-let userInitiated = false;
+========================= */
+let provider;
+let address;
+let chainId;
 
-/* ==================================================
-   APPKIT INITIALIZATION
-   (NO AUTO SESSION HIJACK)
-================================================== */
+/* =========================
+   APPKIT INIT
+========================= */
 const appKit = createAppKit({
-  projectId,
+  projectId: PROJECT_ID,
   adapters: [new EthersAdapter()],
 
   networks: [
@@ -38,91 +36,82 @@ const appKit = createAppKit({
     { id: 137, name: "Polygon" },
     { id: 42161, name: "Arbitrum One" },
     { id: 10, name: "Optimism" },
-    { id: 8453, name: "Base" }
+    { id: 8453, name: "Base" },
   ],
 
   metadata: {
     name: "Wallet Connector",
-    description: "Read-only wallet connection demo",
+    description: "Read-only wallet connection",
     url: window.location.origin,
-    icons: []
+    icons: [],
   },
 
   themeMode: "dark",
-
-  // IMPORTANT: keep AppKit passive
-  enableAnalytics: false,
-  enableOnramp: false
 });
 
-/* ==================================================
+/* =========================
    CONNECT BUTTON
-   (FORCES FRESH MODAL — BINANCE SAFE)
-================================================== */
+========================= */
 connectBtn.addEventListener("click", async () => {
-  userInitiated = true;
-
   statusEl.textContent = "Opening wallet selector…";
-  walletInfoEl.innerHTML = "";
   walletInfoEl.classList.add("hidden");
+  walletInfoEl.innerHTML = "";
   continueBtn.style.display = "none";
 
   try {
-    // Ensure no stale WC session (fixes Binance QR expiry)
+    // Disconnect any stale session first (Binance QR fix)
     await appKit.disconnect().catch(() => {});
+    
+    // Open wallet selector modal
     await appKit.open({ view: "Connect" });
-  } catch (e) {
-    console.error(e);
+  } catch (err) {
+    console.error("Failed to open wallet modal:", err);
     statusEl.textContent = "Failed to open wallet selector.";
   }
 });
 
-/* ==================================================
-   ACCOUNT SUBSCRIPTION
-   (IGNORES AUTO-REHYDRATION)
-================================================== */
-appKit.subscribeAccount((account) => {
-  if (!userInitiated) return;
-  if (!account?.address) return;
+/* =========================
+   ACCOUNT + CHAIN SUBSCRIPTIONS
+========================= */
+let ready = false;
 
+appKit.subscribeAccount(async (account) => {
+  if (!account?.address || ready) return;
   address = account.address;
-  statusEl.textContent = "Account connected. Resolving network…";
+  statusEl.textContent = "Account connected. Waiting for network…";
 });
 
-/* ==================================================
-   CHAIN SUBSCRIPTION
-   (FINAL READY STATE)
-================================================== */
 appKit.subscribeChain(async (chain) => {
-  if (!userInitiated) return;
-  if (!chain?.id || !address) return;
-
+  if (!chain?.id || !address || ready) return;
   chainId = chain.id;
 
   try {
+    // Create provider after both account + chain exist
     provider = new BrowserProvider(appKit.getProvider());
     const balance = await provider.getBalance(address);
 
     walletInfoEl.innerHTML = `
       <div><strong>Address:</strong> ${address}</div>
       <div><strong>Chain ID:</strong> ${chainId}</div>
-      <div><strong>Native Balance:</strong> ${formatEther(balance)}</div>
+      <div><strong>Balance:</strong> ${formatEther(balance)}</div>
     `;
 
     walletInfoEl.classList.remove("hidden");
     continueBtn.style.display = "block";
-    statusEl.textContent = "Wallet connected. Confirm to continue.";
-  } catch (e) {
-    console.error(e);
-    statusEl.textContent = "Failed to read wallet state.";
+    statusEl.textContent = "Wallet connected. Click Continue.";
+    ready = true; // Prevent repeated UI updates
+  } catch (err) {
+    console.error("Error reading wallet info:", err);
+    statusEl.textContent = "Failed to read wallet info.";
   }
 });
 
-/* ==================================================
+/* =========================
    CONTINUE BUTTON
-   (EXPLICIT USER ACTION → BACKEND)
-================================================== */
+========================= */
 continueBtn.addEventListener("click", async () => {
+  if (!address || !chainId) return;
+
   statusEl.textContent = "Confirming session…";
 
   try {
@@ -132,13 +121,12 @@ continueBtn.addEventListener("click", async () => {
       body: JSON.stringify({
         address,
         chainId,
-        timestamp: Date.now()
-      })
+        timestamp: Date.now(),
+      }),
     });
-
     statusEl.textContent = "Session confirmed successfully.";
-  } catch (e) {
-    console.error(e);
+  } catch (err) {
+    console.error("Backend request failed:", err);
     statusEl.textContent = "Backend request failed.";
   }
 });
