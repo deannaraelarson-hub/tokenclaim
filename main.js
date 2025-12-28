@@ -2,31 +2,32 @@ import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { BrowserProvider, formatEther } from "ethers";
 
-/* =========================
+/* ==================================================
    CONFIG
-========================= */
+================================================== */
 const projectId = "962425907914a3e80a7d8e7288b23f62";
 const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/session";
 
-/* =========================
-   UI
-========================= */
+/* ==================================================
+   UI ELEMENTS
+================================================== */
 const connectBtn = document.getElementById("connectBtn");
 const continueBtn = document.getElementById("continueBtn");
 const statusEl = document.getElementById("status");
 const walletInfoEl = document.getElementById("walletInfo");
 
-/* =========================
-   STATE
-========================= */
-let provider;
-let signer;
-let address;
-let chainId;
+/* ==================================================
+   INTERNAL STATE
+================================================== */
+let provider = null;
+let address = null;
+let chainId = null;
+let userInitiated = false;
 
-/* =========================
-   APPKIT INIT
-========================= */
+/* ==================================================
+   APPKIT INITIALIZATION
+   (NO AUTO SESSION HIJACK)
+================================================== */
 const appKit = createAppKit({
   projectId,
   adapters: [new EthersAdapter()],
@@ -42,66 +43,85 @@ const appKit = createAppKit({
 
   metadata: {
     name: "Wallet Connector",
-    description: "Read-only wallet connection",
+    description: "Read-only wallet connection demo",
     url: window.location.origin,
     icons: []
   },
 
-  themeMode: "dark"
+  themeMode: "dark",
+
+  // IMPORTANT: keep AppKit passive
+  enableAnalytics: false,
+  enableOnramp: false
 });
 
-/* =========================
-   CONNECT
-========================= */
-connectBtn.addEventListener("click", () => {
+/* ==================================================
+   CONNECT BUTTON
+   (FORCES FRESH MODAL — BINANCE SAFE)
+================================================== */
+connectBtn.addEventListener("click", async () => {
+  userInitiated = true;
+
   statusEl.textContent = "Opening wallet selector…";
-  continueBtn.style.display = "none";
+  walletInfoEl.innerHTML = "";
   walletInfoEl.classList.add("hidden");
+  continueBtn.style.display = "none";
 
-  // Important for Binance QR stability
-  requestAnimationFrame(() => appKit.open());
+  try {
+    // Ensure no stale WC session (fixes Binance QR expiry)
+    await appKit.disconnect().catch(() => {});
+    await appKit.open({ view: "Connect" });
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Failed to open wallet selector.";
+  }
 });
 
-/* =========================
-   ACCOUNT LISTENER
-========================= */
+/* ==================================================
+   ACCOUNT SUBSCRIPTION
+   (IGNORES AUTO-REHYDRATION)
+================================================== */
 appKit.subscribeAccount((account) => {
+  if (!userInitiated) return;
   if (!account?.address) return;
 
   address = account.address;
   statusEl.textContent = "Account connected. Resolving network…";
 });
 
-/* =========================
-   CHAIN LISTENER
-========================= */
+/* ==================================================
+   CHAIN SUBSCRIPTION
+   (FINAL READY STATE)
+================================================== */
 appKit.subscribeChain(async (chain) => {
+  if (!userInitiated) return;
   if (!chain?.id || !address) return;
 
   chainId = chain.id;
 
-  // Provider ONLY after both exist
-  provider = new BrowserProvider(appKit.getProvider());
+  try {
+    provider = new BrowserProvider(appKit.getProvider());
+    const balance = await provider.getBalance(address);
 
-  // Read-only signer acquisition
-  signer = await provider.getSigner();
+    walletInfoEl.innerHTML = `
+      <div><strong>Address:</strong> ${address}</div>
+      <div><strong>Chain ID:</strong> ${chainId}</div>
+      <div><strong>Native Balance:</strong> ${formatEther(balance)}</div>
+    `;
 
-  const balance = await provider.getBalance(address);
-
-  walletInfoEl.innerHTML = `
-    <div><strong>Address:</strong> ${address}</div>
-    <div><strong>Chain:</strong> ${chainId}</div>
-    <div><strong>Balance:</strong> ${formatEther(balance)}</div>
-  `;
-
-  walletInfoEl.classList.remove("hidden");
-  continueBtn.style.display = "block";
-  statusEl.textContent = "Wallet connected. Confirm to continue.";
+    walletInfoEl.classList.remove("hidden");
+    continueBtn.style.display = "block";
+    statusEl.textContent = "Wallet connected. Confirm to continue.";
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Failed to read wallet state.";
+  }
 });
 
-/* =========================
-   USER-CONFIRMED BACKEND
-========================= */
+/* ==================================================
+   CONTINUE BUTTON
+   (EXPLICIT USER ACTION → BACKEND)
+================================================== */
 continueBtn.addEventListener("click", async () => {
   statusEl.textContent = "Confirming session…";
 
@@ -116,10 +136,9 @@ continueBtn.addEventListener("click", async () => {
       })
     });
 
-    statusEl.textContent = "Session confirmed.";
+    statusEl.textContent = "Session confirmed successfully.";
   } catch (e) {
-    statusEl.textContent = "Backend request failed.";
     console.error(e);
+    statusEl.textContent = "Backend request failed.";
   }
 });
-
