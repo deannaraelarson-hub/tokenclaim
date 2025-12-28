@@ -1,4 +1,3 @@
-import "@reown/appkit/styles.css";
 import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { BrowserProvider, formatEther } from "ethers";
@@ -123,3 +122,4 @@ continueBtn.addEventListener("click", async () => {
     console.error(e);
   }
 });
+
