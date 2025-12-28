@@ -2,31 +2,31 @@ import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { BrowserProvider, formatEther } from "ethers";
 
-/* ----------------------------------
+/* ---------------------------
    CONFIG
------------------------------------ */
+--------------------------- */
 const projectId = "962425907914a3e80a7d8e7288b23f62";
 const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/session";
 
-/* ----------------------------------
+/* ---------------------------
    UI ELEMENTS
------------------------------------ */
+--------------------------- */
 const connectBtn = document.getElementById("connectBtn");
 const continueBtn = document.getElementById("continueBtn");
 const statusEl = document.getElementById("status");
 const walletInfoEl = document.getElementById("walletInfo");
 
-/* ----------------------------------
+/* ---------------------------
    INTERNAL STATE
------------------------------------ */
+--------------------------- */
 let provider = null;
 let signer = null;
-let accountAddress = null;
+let address = null;
 let chainId = null;
 
-/* ----------------------------------
+/* ---------------------------
    APPKIT INITIALIZATION
------------------------------------ */
+--------------------------- */
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   projectId,
@@ -50,56 +50,63 @@ const appKit = createAppKit({
   themeMode: "dark"
 });
 
-/* ----------------------------------
-   CONNECT WALLET
------------------------------------ */
+/* ---------------------------
+   CONNECT BUTTON
+--------------------------- */
 connectBtn.addEventListener("click", async () => {
-  statusEl.textContent = "Opening wallet selector...";
-  walletInfoEl.innerHTML = "";
-  continueBtn.style.display = "none";
+  try {
+    statusEl.textContent = "Opening wallet selector…";
+    walletInfoEl.innerHTML = "";
+    continueBtn.style.display = "none";
 
-  // IMPORTANT:
-  // ❌ DO NOT disconnect here
-  // ❌ DO NOT trigger backend here
-  await appKit.open();
+    // IMPORTANT:
+    // ❌ Do NOT disconnect here
+    // Disconnecting breaks Binance QR
+    await appKit.open();
+
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Failed to open wallet modal";
+  }
 });
 
-/* ----------------------------------
+/* ---------------------------
    STATE SUBSCRIPTION
------------------------------------ */
+--------------------------- */
 appKit.subscribeState(async (state) => {
   if (!state.isConnected) return;
 
   const account = appKit.account;
   const chain = appKit.chain;
 
-  // Wait for full hydration
+  // Wait for full wallet approval
   if (!account?.address || !chain?.id) return;
 
-  accountAddress = account.address;
+  address = account.address;
   chainId = chain.id;
 
   statusEl.textContent = "Wallet connected. Awaiting confirmation…";
 
-  // Proper provider acquisition
+  // ✅ Correct provider & signer acquisition (ethers v6)
   provider = new BrowserProvider(appKit.getProvider());
   signer = await provider.getSigner();
 
-  const balance = await provider.getBalance(accountAddress);
+  const balance = await provider.getBalance(address);
 
   walletInfoEl.innerHTML = `
-    <div><strong>Address:</strong> ${accountAddress}</div>
+    <div><strong>Address:</strong> ${address}</div>
     <div><strong>Chain ID:</strong> ${chainId}</div>
     <div><strong>Native Balance:</strong> ${formatEther(balance)}</div>
   `;
 
-  // Explicit user confirmation step
+  // Explicit user action step
   continueBtn.style.display = "block";
 });
 
-/* ----------------------------------
-   CONTINUE BUTTON (EXPLICIT ACTION)
------------------------------------ */
+/* ---------------------------
+   CONTINUE BUTTON
+   (EXPLICIT USER ACTION)
+--------------------------- */
 continueBtn.addEventListener("click", async () => {
   statusEl.textContent = "Session confirmed. Sending to backend…";
 
@@ -108,7 +115,7 @@ continueBtn.addEventListener("click", async () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        address: accountAddress,
+        address,
         chainId
       })
     });
