@@ -31,7 +31,7 @@ const appKit = createAppKit({
   networks: [
     { id: 1, name: "Ethereum" },
     { id: 56, name: "Binance Smart Chain" },
-    { id: 137,  name: "Polygon" },
+    { id: 137, name: "Polygon" },
     { id: 42161, name: "Arbitrum One" },
     { id: 10, name: "Optimism" },
     { id: 8453, name: "Base" },
