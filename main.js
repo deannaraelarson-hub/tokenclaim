@@ -2,6 +2,19 @@ import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { BrowserProvider, formatEther } from "ethers";
 
+// ✅ REQUIRED: AppKit styles
+import "@reown/appkit/styles.css";
+
+// ✅ REQUIRED: Official network definitions
+import {
+  mainnet,
+  bsc,
+  polygon,
+  arbitrum,
+  optimism,
+  base
+} from "@reown/appkit/networks";
+
 /* ---------------------------
    CONFIG
 --------------------------- */
@@ -31,13 +44,14 @@ const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   projectId,
 
+  // ✅ CORRECT networks
   networks: [
-    { id: 1, name: "Ethereum" },
-    { id: 56, name: "Binance Smart Chain" },
-    { id: 137, name: "Polygon" },
-    { id: 42161, name: "Arbitrum One" },
-    { id: 10, name: "Optimism" },
-    { id: 8453, name: "Base" }
+    mainnet,
+    bsc,
+    polygon,
+    arbitrum,
+    optimism,
+    base
   ],
 
   metadata: {
@@ -58,16 +72,19 @@ connectBtn.addEventListener("click", async () => {
   continueBtn.style.display = "none";
   walletInfoEl.classList.add("hidden");
 
-  // Let AppKit fully mount before opening (Binance fix)
-  requestAnimationFrame(() => {
-    appKit.open();
-  });
+  try {
+    // ✅ MUST be awaited
+    await appKit.open();
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Failed to open wallet modal";
+  }
 });
 
 /* ---------------------------
    ACCOUNT SUBSCRIPTION
 --------------------------- */
-appKit.subscribeAccount(async (account) => {
+appKit.subscribeAccount((account) => {
   if (!account?.address) return;
 
   address = account.address;
@@ -82,7 +99,7 @@ appKit.subscribeChain(async (chain) => {
 
   chainId = chain.id;
 
-  // Provider MUST be created after both account + chain exist
+  // ✅ Correct ethers v6 provider
   provider = new BrowserProvider(appKit.getProvider());
   signer = await provider.getSigner();
 
