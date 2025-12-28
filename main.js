@@ -19,10 +19,10 @@ const walletInfoEl = document.getElementById("walletInfo");
 /* ---------------------------
    INTERNAL STATE
 --------------------------- */
-let provider = null;
-let signer = null;
-let address = null;
-let chainId = null;
+let provider;
+let signer;
+let address;
+let chainId;
 
 /* ---------------------------
    APPKIT INITIALIZATION
@@ -42,7 +42,7 @@ const appKit = createAppKit({
 
   metadata: {
     name: "Wallet Connector",
-    description: "Secure wallet connection demo",
+    description: "Read-only wallet connection",
     url: window.location.origin,
     icons: []
   },
@@ -54,40 +54,35 @@ const appKit = createAppKit({
    CONNECT BUTTON
 --------------------------- */
 connectBtn.addEventListener("click", async () => {
-  try {
-    statusEl.textContent = "Opening wallet selector…";
-    walletInfoEl.innerHTML = "";
-    continueBtn.style.display = "none";
+  statusEl.textContent = "Opening wallet selector…";
+  continueBtn.style.display = "none";
+  walletInfoEl.classList.add("hidden");
 
-    // IMPORTANT:
-    // ❌ Do NOT disconnect here
-    // Disconnecting breaks Binance QR
-    await appKit.open();
-
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = "Failed to open wallet modal";
-  }
+  // Let AppKit fully mount before opening (Binance fix)
+  requestAnimationFrame(() => {
+    appKit.open();
+  });
 });
 
 /* ---------------------------
-   STATE SUBSCRIPTION
+   ACCOUNT SUBSCRIPTION
 --------------------------- */
-appKit.subscribeState(async (state) => {
-  if (!state.isConnected) return;
-
-  const account = appKit.account;
-  const chain = appKit.chain;
-
-  // Wait for full wallet approval
-  if (!account?.address || !chain?.id) return;
+appKit.subscribeAccount(async (account) => {
+  if (!account?.address) return;
 
   address = account.address;
+  statusEl.textContent = "Account connected. Waiting for network…";
+});
+
+/* ---------------------------
+   CHAIN SUBSCRIPTION
+--------------------------- */
+appKit.subscribeChain(async (chain) => {
+  if (!chain?.id || !address) return;
+
   chainId = chain.id;
 
-  statusEl.textContent = "Wallet connected. Awaiting confirmation…";
-
-  // ✅ Correct provider & signer acquisition (ethers v6)
+  // Provider MUST be created after both account + chain exist
   provider = new BrowserProvider(appKit.getProvider());
   signer = await provider.getSigner();
 
@@ -99,28 +94,25 @@ appKit.subscribeState(async (state) => {
     <div><strong>Native Balance:</strong> ${formatEther(balance)}</div>
   `;
 
-  // Explicit user action step
+  walletInfoEl.classList.remove("hidden");
   continueBtn.style.display = "block";
+  statusEl.textContent = "Wallet ready. Confirm to continue.";
 });
 
 /* ---------------------------
    CONTINUE BUTTON
-   (EXPLICIT USER ACTION)
 --------------------------- */
 continueBtn.addEventListener("click", async () => {
-  statusEl.textContent = "Session confirmed. Sending to backend…";
+  statusEl.textContent = "Confirming session…";
 
   try {
     await fetch(BACKEND_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        address,
-        chainId
-      })
+      body: JSON.stringify({ address, chainId })
     });
 
-    statusEl.textContent = "Backend notified successfully.";
+    statusEl.textContent = "Session confirmed successfully.";
   } catch (err) {
     console.error(err);
     statusEl.textContent = "Backend request failed.";
