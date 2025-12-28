@@ -35,7 +35,7 @@ const appKit = createAppKit({
     {
       id: 42161,
       name: "Arbitrum One",
-      rpcUrl: "https://arbitrum-one.rpc.moo.fi"
+      rpc than: "https://arbitrum-one.rpc.moo.fi"
     },
     {
       id: 1030,
