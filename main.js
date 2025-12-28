@@ -63,7 +63,7 @@ connectBtn.addEventListener("click", async () => {
 
     // CRITICAL: kills stale WalletConnect sessions (Binance fix)
     await appKit.disconnect();
-    await appKit.connect(); // Use connect() instead of open()
+    await appKit.open(); // Use open() to open the modal
 
   } catch (err) {
     console.error("Modal error:", err);
