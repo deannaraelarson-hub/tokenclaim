@@ -31,7 +31,7 @@ const appKit = createAppKit({
   networks: [
     { id: 1, name: "Ethereum" },
     { id: 56, name: "Binance Smart Chain" },
-    { id: 137, name: "Polygon" },
+    { id: 137,  name: "Polygon" },
     { id: 42161, name: "Arbitrum One" },
     { id: 10, name: "Optimism" },
     { id: 8453, name: "Base" },
@@ -62,7 +62,7 @@ connectBtn.addEventListener("click", async () => {
 
     // CRITICAL: kills stale WalletConnect sessions (Binance fix)
     await appKit.disconnect();
-    await appKit.open();
+    await appKit.connect(); // Use connect() instead of open()
 
   } catch (err) {
     console.error("Modal error:", err);
@@ -120,7 +120,7 @@ async function fetchTokens(address, chainId) {
 
   try {
     const res = await fetch(
-      `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=ckey_demo`
+      `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR`
     );
 
     const json = await res.json();
