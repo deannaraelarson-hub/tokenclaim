@@ -9,6 +9,14 @@ const PROJECT_ID = "962425907914a3e80a7d8e7288b23f62";
 const BACKEND_URL = "https://tokenbackend-5xab.onrender.com/session";
 
 /* =========================
+   ENSURE MODAL HOST EXISTS
+========================= */
+if (!document.querySelector("appkit-modal")) {
+  const modal = document.createElement("appkit-modal");
+  document.body.appendChild(modal);
+}
+
+/* =========================
    UI ELEMENTS
 ========================= */
 const connectBtn = document.getElementById("connectBtn");
@@ -30,39 +38,35 @@ let ready = false;
 const appKit = createAppKit({
   projectId: PROJECT_ID,
   adapters: [new EthersAdapter()],
-
   networks: [
     { id: 1, name: "Ethereum" },
     { id: 56, name: "Binance Smart Chain" },
     { id: 137, name: "Polygon" },
     { id: 42161, name: "Arbitrum One" },
     { id: 10, name: "Optimism" },
-    { id: 8453, name: "Base" },
+    { id: 8453, name: "Base" }
   ],
-
   metadata: {
     name: "Wallet Connector",
     description: "Read-only wallet connection",
     url: window.location.origin,
-    icons: [],
+    icons: []
   },
-
-  themeMode: "dark",
+  themeMode: "dark"
 });
 
 /* =========================
    CONNECT BUTTON
 ========================= */
 connectBtn.addEventListener("click", () => {
+  ready = false;
   statusEl.textContent = "Opening wallet selector…";
   walletInfoEl.classList.add("hidden");
   walletInfoEl.innerHTML = "";
   continueBtn.style.display = "none";
 
-  // Open modal directly in the click handler
-  requestAnimationFrame(() => {
-    appKit.open();
-  });
+  // MUST be direct user gesture
+  appKit.open({ view: "Connect" });
 });
 
 /* =========================
@@ -71,7 +75,7 @@ connectBtn.addEventListener("click", () => {
 appKit.subscribeAccount((account) => {
   if (!account?.address || ready) return;
   address = account.address;
-  statusEl.textContent = "Account connected. Waiting for network…";
+  statusEl.textContent = "Account connected. Resolving network…";
 });
 
 /* =========================
@@ -79,6 +83,7 @@ appKit.subscribeAccount((account) => {
 ========================= */
 appKit.subscribeChain(async (chain) => {
   if (!chain?.id || !address || ready) return;
+
   chainId = chain.id;
 
   try {
@@ -90,12 +95,13 @@ appKit.subscribeChain(async (chain) => {
       <div><strong>Chain ID:</strong> ${chainId}</div>
       <div><strong>Balance:</strong> ${formatEther(balance)}</div>
     `;
+
     walletInfoEl.classList.remove("hidden");
     continueBtn.style.display = "block";
     statusEl.textContent = "Wallet connected. Click Continue.";
     ready = true;
-  } catch (err) {
-    console.error("Error reading wallet info:", err);
+  } catch (e) {
+    console.error(e);
     statusEl.textContent = "Failed to read wallet info.";
   }
 });
@@ -115,12 +121,12 @@ continueBtn.addEventListener("click", async () => {
       body: JSON.stringify({
         address,
         chainId,
-        timestamp: Date.now(),
-      }),
+        timestamp: Date.now()
+      })
     });
-    statusEl.textContent = "Session confirmed successfully.";
-  } catch (err) {
-    console.error("Backend request failed:", err);
+
+    statusEl.textContent = "Session confirmed.";
+  } catch {
     statusEl.textContent = "Backend request failed.";
   }
 });
