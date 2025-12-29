@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Multi-Chain Wallet Scanner</title>
   
-  <!-- Load ethers first -->
-  <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+  <!-- REMOVE THIS CDN SCRIPT - we're using module imports -->
+  <!-- <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script> -->
   
   <style>
     body {
@@ -259,7 +259,7 @@
 
       <!-- STATUS MESSAGE -->
       <div id="status" class="status">
-        ⏳ Ready to connect...
+        ⏳ Loading...
       </div>
 
       <!-- CHAIN SELECTOR -->
@@ -296,7 +296,37 @@
     </div>
   </main>
 
-  <!-- MAIN SCRIPT -->
-  <script src="main.js"></script>
+  <!-- FIXED: ADD type="module" TO SCRIPT TAG -->
+  <script type="module" src="main.js"></script>
+  
+  <!-- Debug script to verify button works -->
+  <script>
+    // Debug: Verify button exists and is clickable
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('connectBtn');
+      const status = document.getElementById('status');
+      
+      if (btn) {
+        console.log('✅ Connect button found in DOM');
+        
+        // Add temporary debug click handler
+        const debugClick = (e) => {
+          console.log('DEBUG: Button clicked!', e);
+          if (status) {
+            status.textContent = 'Button clicked! Loading wallet...';
+          }
+        };
+        
+        btn.addEventListener('click', debugClick, { once: true });
+        
+        // Also check if button has pointer events
+        console.log('Button style:', window.getComputedStyle(btn).pointerEvents);
+        console.log('Button cursor:', window.getComputedStyle(btn).cursor);
+        
+      } else {
+        console.error('❌ Connect button NOT found in DOM');
+      }
+    });
+  </script>
 </body>
 </html>
