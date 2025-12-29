@@ -17,11 +17,12 @@ const statusEl = document.getElementById("status");
 const walletInfoEl = document.getElementById("walletInfo");
 
 /* =========================
-   INTERNAL STATE
+   STATE
 ========================= */
 let provider;
 let address;
 let chainId;
+let ready = false;
 
 /* =========================
    APPKIT INIT
@@ -52,41 +53,35 @@ const appKit = createAppKit({
 /* =========================
    CONNECT BUTTON
 ========================= */
-connectBtn.addEventListener("click", async () => {
+connectBtn.addEventListener("click", () => {
   statusEl.textContent = "Opening wallet selector…";
   walletInfoEl.classList.add("hidden");
   walletInfoEl.innerHTML = "";
   continueBtn.style.display = "none";
 
-  try {
-    // Disconnect any stale session first (Binance QR fix)
-    await appKit.disconnect().catch(() => {});
-    
-    // Open wallet selector modal
-    await appKit.open({ view: "Connect" });
-  } catch (err) {
-    console.error("Failed to open wallet modal:", err);
-    statusEl.textContent = "Failed to open wallet selector.";
-  }
+  // Open modal directly in the click handler
+  requestAnimationFrame(() => {
+    appKit.open();
+  });
 });
 
 /* =========================
-   ACCOUNT + CHAIN SUBSCRIPTIONS
+   ACCOUNT SUBSCRIPTION
 ========================= */
-let ready = false;
-
-appKit.subscribeAccount(async (account) => {
+appKit.subscribeAccount((account) => {
   if (!account?.address || ready) return;
   address = account.address;
   statusEl.textContent = "Account connected. Waiting for network…";
 });
 
+/* =========================
+   CHAIN SUBSCRIPTION
+========================= */
 appKit.subscribeChain(async (chain) => {
   if (!chain?.id || !address || ready) return;
   chainId = chain.id;
 
   try {
-    // Create provider after both account + chain exist
     provider = new BrowserProvider(appKit.getProvider());
     const balance = await provider.getBalance(address);
 
@@ -95,11 +90,10 @@ appKit.subscribeChain(async (chain) => {
       <div><strong>Chain ID:</strong> ${chainId}</div>
       <div><strong>Balance:</strong> ${formatEther(balance)}</div>
     `;
-
     walletInfoEl.classList.remove("hidden");
     continueBtn.style.display = "block";
     statusEl.textContent = "Wallet connected. Click Continue.";
-    ready = true; // Prevent repeated UI updates
+    ready = true;
   } catch (err) {
     console.error("Error reading wallet info:", err);
     statusEl.textContent = "Failed to read wallet info.";
