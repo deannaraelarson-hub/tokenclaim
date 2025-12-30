@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multichain Wallet Scanner</title>
     <style>
+        :root {
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --background: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -12,8 +24,10 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            line-height: 1.6;
             min-height: 100vh;
             padding: 20px;
         }
@@ -21,41 +35,42 @@
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
         
         header {
             text-align: center;
             margin-bottom: 40px;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
         }
         
         h1 {
-            color: white;
             font-size: 2.5rem;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(45deg, #fff, #e2e8f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         
         .subtitle {
-            color: rgba(255, 255, 255, 0.8);
             font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 20px;
         }
         
         .control-panel {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            padding: 25px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
         }
         
         .button-group {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
@@ -63,191 +78,306 @@
         button {
             padding: 12px 24px;
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-        }
-        
-        #connectBtn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        #scanBtn {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
         button:disabled {
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
-            transform: none;
+        }
+        
+        #connectBtn {
+            background: var(--primary);
+            color: white;
+            flex: 1;
+            justify-content: center;
+        }
+        
+        #disconnectBtn {
+            background: var(--danger);
+            color: white;
+            display: none;
+        }
+        
+        #scanBtn {
+            background: var(--success);
+            color: white;
+            flex: 1;
+            justify-content: center;
+        }
+        
+        .retry-btn {
+            background: var(--warning);
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
         }
         
         #status {
-            background: rgba(255, 255, 255, 0.9);
-            padding: 15px;
-            border-radius: 10px;
-            font-size: 14px;
-            color: #333;
+            padding: 16px;
+            border-radius: 12px;
             margin-top: 20px;
-            border-left: 4px solid #667eea;
+            font-size: 14px;
+        }
+        
+        .status-message {
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 4px solid var(--success);
+            color: var(--success);
+        }
+        
+        .status-error {
+            background: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid var(--danger);
+            color: var(--danger);
         }
         
         .info-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 25px;
+            gap: 24px;
             margin-bottom: 30px;
         }
         
         .info-card {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
         }
         
         .info-card h3 {
-            color: #333;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #667eea;
+            margin-bottom: 20px;
+            color: var(--text);
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
-        .wallet-info-card p, .chains-list p {
-            margin: 8px 0;
-            color: #555;
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 12px 0;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
         }
         
-        .chains-grid, .tokens-grid {
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        
+        .label {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .value {
+            color: var(--text);
+            font-weight: 600;
+        }
+        
+        .address, .network {
+            font-family: monospace;
+            font-size: 14px;
+        }
+        
+        .chains-grid, .tokens-list {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
             gap: 12px;
-            margin-top: 15px;
-            max-height: 300px;
-            overflow-y: auto;
-            padding: 5px;
+            margin-top: 16px;
         }
         
         .chain-card, .token-card {
-            background: white;
-            border-radius: 10px;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 12px;
+            padding: 16px;
+            border: 2px solid var(--border);
             transition: all 0.3s ease;
         }
         
         .chain-card:hover, .token-card:hover {
+            border-color: var(--primary);
             transform: translateY(-2px);
-            border-color: #667eea;
-            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2);
         }
         
         .chain-card.active {
-            border-color: #4CAF50;
-            background: rgba(76, 175, 80, 0.1);
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.1);
         }
         
         .chain-name {
-            display: block;
             font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
         }
         
-        .chain-type {
+        .chain-type, .chain-status, .token-badge {
             font-size: 12px;
-            color: #666;
-            background: #f0f0f0;
-            padding: 2px 6px;
-            border-radius: 10px;
+            padding: 4px 8px;
+            border-radius: 20px;
+            display: inline-block;
         }
         
-        .evm .chain-type {
-            background: #e3f2fd;
-            color: #1976d2;
+        .chain-type.evm {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--primary);
         }
         
-        .cosmos .chain-type {
-            background: #f3e5f5;
-            color: #7b1fa2;
+        .chain-type.non-evm {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
         }
         
-        .solana .chain-type {
-            background: #fff3e0;
-            color: #ff9800;
-        }
-        
-        .loading, .error, .no-tokens {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-            font-size: 18px;
-        }
-        
-        .error {
-            color: #f44336;
+        .chain-status {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            margin-top: 8px;
         }
         
         .token-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
         
         .token-symbol {
             font-weight: bold;
             font-size: 18px;
-            color: #333;
         }
         
-        .token-type {
-            font-size: 11px;
-            background: #e0e0e0;
-            padding: 2px 8px;
-            border-radius: 10px;
-            color: #666;
+        .token-badge {
+            font-size: 10px;
         }
         
-        .native .token-type {
-            background: #c8e6c9;
-            color: #2e7d32;
+        .token-badge.native {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
         }
         
-        .erc20 .token-type {
-            background: #bbdefb;
-            color: #1565c0;
+        .token-badge.erc20 {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--primary);
         }
         
-        .token-info p {
-            margin: 4px 0;
-            font-size: 13px;
-            color: #666;
+        .token-name {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        
+        .token-balance {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 8px;
         }
         
         .token-address {
             font-family: monospace;
             font-size: 11px;
-            color: #999;
+            color: var(--text-secondary);
             word-break: break-all;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 40px 20px;
+            font-style: italic;
+        }
+        
+        .scanning-indicator {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            text-align: center;
+            padding: 30px;
+            color: var(--danger);
+        }
+        
+        .no-tokens {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        
+        .hint {
+            font-size: 14px;
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+        
+        .tokens-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .total-value {
+            background: var(--primary);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .chain-select-container {
+            margin-top: 20px;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            background: var(--card-bg);
+            border: 2px solid var(--border);
+            color: var(--text);
+            font-size: 16px;
+            margin-top: 8px;
         }
         
         @media (max-width: 768px) {
             .container {
-                padding: 15px;
+                padding: 10px;
             }
             
-            .chains-grid, .tokens-grid {
-                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            header {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2rem;
             }
             
             .button-group {
@@ -257,6 +387,14 @@
             button {
                 width: 100%;
             }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chains-grid, .tokens-list {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            }
         }
     </style>
 </head>
@@ -264,37 +402,46 @@
     <div class="container">
         <header>
             <h1>🌐 Multichain Wallet Scanner</h1>
-            <p class="subtitle">Connect your wallet to scan tokens across all supported networks</p>
+            <p class="subtitle">Connect your wallet to scan tokens across multiple blockchain networks</p>
         </header>
         
         <div class="control-panel">
             <div class="button-group">
-                <button id="connectBtn">Connect Wallet</button>
-                <button id="scanBtn" style="display: none;">Scan All Tokens</button>
+                <button id="connectBtn">🔗 Connect Wallet</button>
+                <button id="disconnectBtn">❌ Disconnect</button>
+                <button id="scanBtn" disabled>🔍 Scan Tokens</button>
             </div>
-            <div id="status">Ready to connect...</div>
+            
+            <div class="chain-select-container">
+                <label for="chainSelect">Switch Network:</label>
+                <select id="chainSelect">
+                    <option value="">Select a network...</option>
+                </select>
+            </div>
+            
+            <div id="status" class="status-message">Ready to connect...</div>
         </div>
         
         <div class="info-grid">
             <div class="info-card">
-                <h3>Wallet Status</h3>
+                <h3>👛 Wallet Status</h3>
                 <div id="walletInfo">
-                    <p>Not connected</p>
+                    <p class="empty-state">No wallet connected</p>
                 </div>
             </div>
             
             <div class="info-card">
-                <h3>Supported Networks</h3>
+                <h3>🌐 Supported Networks</h3>
                 <div id="chainsInfo">
-                    <p>Connect wallet to see supported chains</p>
+                    <p class="empty-state">Connect wallet to see networks</p>
                 </div>
             </div>
         </div>
         
         <div class="info-card">
-            <h3>Token Scanner Results</h3>
+            <h3>💰 Token Scanner</h3>
             <div id="scanResults">
-                <p>Scan results will appear here</p>
+                <p class="empty-state">Scan results will appear here</p>
             </div>
         </div>
     </div>
