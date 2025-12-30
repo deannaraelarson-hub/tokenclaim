@@ -4,14 +4,126 @@ import { ethers } from "ethers";
 
 const projectId = "962425907914a3e80a7d8e7288b23f62";
 
-// State
-let appKit = null;
-let isConnected = false;
-let currentAccount = null;
-let currentChain = null;
+// ALL CHAINS IN EXISTENCE (EVM + Non-EVM)
+const ALL_CHAINS = {
+  evm: {
+    1: { 
+      name: "Ethereum", 
+      native: "ETH", 
+      type: "evm", 
+      scan: "etherscan.io",
+      rpc: "https://eth.llamarpc.com"
+    },
+    56: { 
+      name: "BNB Chain", 
+      native: "BNB", 
+      type: "evm", 
+      scan: "bscscan.com",
+      rpc: "https://bsc-dataseed.binance.org"
+    },
+    137: { 
+      name: "Polygon", 
+      native: "MATIC", 
+      type: "evm", 
+      scan: "polygonscan.com",
+      rpc: "https://polygon-rpc.com"
+    },
+    42161: { 
+      name: "Arbitrum", 
+      native: "ETH", 
+      type: "evm", 
+      scan: "arbiscan.io",
+      rpc: "https://arb1.arbitrum.io/rpc"
+    },
+    10: { 
+      name: "Optimism", 
+      native: "ETH", 
+      type: "evm", 
+      scan: "optimistic.etherscan.io",
+      rpc: "https://mainnet.optimism.io"
+    },
+    8453: { 
+      name: "Base", 
+      native: "ETH", 
+      type: "evm", 
+      scan: "basescan.org",
+      rpc: "https://mainnet.base.org"
+    },
+    43114: { 
+      name: "Avalanche", 
+      native: "AVAX", 
+      type: "evm", 
+      scan: "snowtrace.io",
+      rpc: "https://api.avax.network/ext/bc/C/rpc"
+    },
+    250: { 
+      name: "Fantom", 
+      native: "FTM", 
+      type: "evm", 
+      scan: "ftmscan.com",
+      rpc: "https://rpc.ftm.tools"
+    },
+    25: { 
+      name: "Cronos", 
+      native: "CRO", 
+      type: "evm", 
+      scan: "cronoscan.com",
+      rpc: "https://evm.cronos.org"
+    },
+    100: { 
+      name: "Gnosis", 
+      native: "xDAI", 
+      type: "evm", 
+      scan: "gnosisscan.io",
+      rpc: "https://rpc.gnosischain.com"
+    }
+  },
+  nonEVM: {
+    "solana": { 
+      name: "Solana", 
+      native: "SOL", 
+      type: "solana", 
+      scan: "solscan.io" 
+    },
+    "tron": { 
+      name: "Tron", 
+      native: "TRX", 
+      type: "tron", 
+      scan: "tronscan.org",
+      chainId: "0x2b6653dc"
+    },
+    "cosmos": { 
+      name: "Cosmos Hub", 
+      native: "ATOM", 
+      type: "cosmos", 
+      scan: "www.mintscan.io/cosmos" 
+    },
+    "bitcoin": { 
+      name: "Bitcoin", 
+      native: "BTC", 
+      type: "bitcoin", 
+      scan: "blockchain.com" 
+    }
+  }
+};
 
-// DOM Elements
-let connectBtn, disconnectBtn, status, walletInfo, chainsInfo, scanBtn, scanResults;
+// Add Tron support with WalletConnect v2
+const TRON_CONFIG = {
+  id: "tron",
+  name: "Tron",
+  network: "tron",
+  nativeCurrency: {
+    name: "TRON",
+    symbol: "TRX",
+    decimals: 6
+  },
+  rpcUrls: {
+    default: { http: ["https://api.trongrid.io"] }
+  },
+  blockExplorers: {
+    default: { name: "Tronscan", url: "https://tronscan.org" }
+  }
+};
 
 // Common tokens
 const COMMON_TOKENS = {
@@ -22,12 +134,15 @@ const COMMON_TOKENS = {
   },
   56: {
     'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
-    'USDT': '0x55d398326f99059fF775485246999027B3197955',
-    'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d'
+    'USDT': '0x55d398326f99059fF775485246999027B3197955'
   },
   137: {
     'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
     'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
+  },
+  42161: {
+    'USDT': '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+    'USDC': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
   }
 };
 
@@ -39,241 +154,356 @@ const ERC20_ABI = [
   "function name() view returns (string)"
 ];
 
-// Initialize AppKit with SIMPLE configuration
+// Global state
+let appKit = null;
+let provider = null;
+let isConnected = false;
+let walletInfo = {
+  address: null,
+  chainId: null,
+  chainType: null,
+  walletName: null,
+  connector: null
+};
+
+// DOM elements
+let connectBtn, disconnectBtn, status, walletInfoEl, chainsInfo, scanBtn, scanResults;
+
+// Initialize AppKit with custom configuration
 async function initializeAppKit() {
   try {
-    console.log("🔄 Initializing wallet...");
+    console.log("🚀 Initializing AppKit...");
     
-    // Use only essential configuration
+    // Create EVM chains array
+    const evmChains = Object.entries(ALL_CHAINS.evm).map(([chainId, chain]) => ({
+      id: parseInt(chainId),
+      name: chain.name,
+      rpcUrl: chain.rpc
+    }));
+
+    // Create AppKit with specific configuration to avoid SVG errors
     appKit = createAppKit({
       adapters: [new EthersAdapter()],
       projectId,
-      networks: [
-        { id: 1, name: "Ethereum", rpcUrl: "https://ethereum.publicnode.com" },
-        { id: 56, name: "BNB Chain", rpcUrl: "https://bsc-dataseed.binance.org" },
-        { id: 137, name: "Polygon", rpcUrl: "https://polygon-rpc.com" }
-      ],
+      networks: evmChains,
+      defaultNetwork: evmChains[0],
       metadata: {
-        name: "Wallet Scanner",
-        description: "Scan your wallet tokens",
+        name: "Universal Chain Scanner",
+        description: "Scan tokens across all blockchains",
         url: window.location.origin,
-        icons: []
+        icons: ["https://avatars.githubusercontent.com/u/37784886"]
+      },
+      themeVariables: {
+        "--w3m-accent": "#3b82f6",
+        "--w3m-border-radius-master": "12px",
+        "--w3m-font-family": "-apple-system, system-ui, sans-serif"
       },
       themeMode: "dark",
       features: {
         analytics: false,
-        email: false
+        email: false,
+        allWallets: true
       }
     });
-    
-    console.log("✅ Wallet initialized");
+
+    console.log("✅ AppKit initialized");
     return true;
-    
+
   } catch (error) {
-    console.error("❌ Failed to initialize wallet:", error);
+    console.error("❌ AppKit initialization failed:", error);
+    showError(`Failed to initialize: ${error.message}`);
     return false;
   }
 }
 
-// Initialize DOM
+// Initialize DOM elements
 function initializeDOM() {
   connectBtn = document.getElementById("connectBtn");
   disconnectBtn = document.getElementById("disconnectBtn");
   status = document.getElementById("status");
-  walletInfo = document.getElementById("walletInfo");
+  walletInfoEl = document.getElementById("walletInfo");
   chainsInfo = document.getElementById("chainsInfo");
   scanBtn = document.getElementById("scanBtn");
   scanResults = document.getElementById("scanResults");
-  
+
   if (!connectBtn) {
     console.error("❌ Connect button not found!");
     return false;
   }
-  
+
   return true;
 }
 
 // Connect wallet
 async function connectWallet() {
   if (!appKit) {
-    showError("Wallet not ready. Please refresh.");
+    showError("Wallet connector not ready. Please refresh.");
     return;
   }
-  
+
   try {
     // Update UI
     connectBtn.disabled = true;
-    connectBtn.textContent = "Opening...";
+    connectBtn.innerHTML = '<span class="spinner"></span> Connecting...';
     status.textContent = "Opening wallet modal...";
     status.className = "status-message";
-    
+
     // Open modal
     await appKit.open();
     
     console.log("✅ Wallet modal opened");
-    
+
   } catch (error) {
     console.error("❌ Connection error:", error);
-    showError("Failed to open wallet. Please try again.");
+    showError(`Failed to connect: ${error.message}`);
+    resetConnectionButton();
+  }
+}
+
+// Reset connection button
+function resetConnectionButton() {
+  if (connectBtn) {
     connectBtn.disabled = false;
     connectBtn.textContent = "Connect Wallet";
   }
 }
 
-// Setup state listeners
+// Setup state subscription
 function setupStateListeners() {
   if (!appKit) return;
-  
-  appKit.subscribeState((state) => {
-    console.log("📱 Wallet state update:", state);
+
+  appKit.subscribeState(async (state) => {
+    console.log("📱 Wallet state:", state);
     
-    // Check if connected
-    if (state.isConnected && state.account && state.account.address) {
-      handleConnectionSuccess(state);
-    } else {
-      handleDisconnection();
+    if (state.isConnected && state.account) {
+      await handleWalletConnected(state);
+    } else if (!state.isConnected) {
+      handleWalletDisconnected();
+    }
+  });
+
+  // Handle connection errors
+  appKit.subscribeEvents((event) => {
+    console.log("📡 AppKit event:", event);
+    
+    if (event.type === 'DISCONNECT_ERROR' || event.type === 'CONNECT_ERROR') {
+      showError(`Wallet error: ${event.data?.message || 'Unknown error'}`);
+      resetConnectionButton();
     }
   });
 }
 
-// Handle successful connection
-async function handleConnectionSuccess(state) {
+// Handle wallet connection
+async function handleWalletConnected(state) {
   try {
     isConnected = true;
-    currentAccount = state.account;
-    currentChain = state.chain;
     
-    console.log("✅ Wallet connected:", {
-      address: currentAccount.address,
-      chain: currentChain,
-      wallet: currentAccount.connector?.name
-    });
+    // Get provider
+    provider = await appKit.getProvider();
     
+    // Extract wallet info
+    walletInfo.address = state.account.address;
+    walletInfo.chainId = state.chain?.id || 1;
+    walletInfo.walletName = state.account.connector?.name || "Unknown Wallet";
+    walletInfo.connector = state.account.connector;
+
+    // Detect chain type
+    if (ALL_CHAINS.evm[walletInfo.chainId]) {
+      walletInfo.chainType = "evm";
+      walletInfo.chainName = ALL_CHAINS.evm[walletInfo.chainId].name;
+      walletInfo.nativeCurrency = ALL_CHAINS.evm[walletInfo.chainId].native;
+    } else {
+      // Try to detect non-EVM
+      walletInfo.chainType = detectChainType(state);
+      walletInfo.chainName = walletInfo.chainType.charAt(0).toUpperCase() + walletInfo.chainType.slice(1);
+      walletInfo.nativeCurrency = getNativeCurrency(walletInfo.chainType);
+    }
+
     // Update UI
-    updateUI();
+    updateWalletDisplay();
+    updateNetworksDisplay();
     
-    // Show success message
-    const walletName = currentAccount.connector?.name || "Wallet";
-    const chainName = currentChain?.name || "Network";
-    showMessage(`✅ Connected to ${walletName} on ${chainName}`);
+    // Show success
+    showMessage(`✅ Connected to ${walletInfo.walletName} on ${walletInfo.chainName}`);
     
-    // Auto-scan after delay
+    // Update buttons
+    connectBtn.disabled = true;
+    connectBtn.textContent = "Connected";
+    
+    if (disconnectBtn) {
+      disconnectBtn.style.display = "block";
+    }
+    
+    if (scanBtn) {
+      scanBtn.disabled = false;
+    }
+
+    // Auto-scan
     setTimeout(() => {
       if (isConnected) {
         scanTokens();
       }
-    }, 1000);
-    
+    }, 2000);
+
   } catch (error) {
     console.error("❌ Error handling connection:", error);
-    showError("Connection error");
+    showError(`Connection error: ${error.message}`);
+    resetConnectionButton();
   }
 }
 
-// Handle disconnection
-function handleDisconnection() {
-  isConnected = false;
-  currentAccount = null;
-  currentChain = null;
+// Detect chain type from state
+function detectChainType(state) {
+  const walletName = (state.account.connector?.name || "").toLowerCase();
   
+  if (walletName.includes("tron") || walletName.includes("tronlink")) return "tron";
+  if (walletName.includes("solana") || walletName.includes("phantom")) return "solana";
+  if (walletName.includes("cosmos") || walletName.includes("keplr")) return "cosmos";
+  if (walletName.includes("bitcoin") || walletName.includes("ledger")) return "bitcoin";
+  
+  return "evm";
+}
+
+// Get native currency
+function getNativeCurrency(chainType) {
+  const currencies = {
+    tron: "TRX",
+    solana: "SOL",
+    cosmos: "ATOM",
+    bitcoin: "BTC",
+    evm: "ETH"
+  };
+  
+  return currencies[chainType] || "Native";
+}
+
+// Handle wallet disconnection
+function handleWalletDisconnected() {
   console.log("🔌 Wallet disconnected");
   
-  // Reset UI
-  resetUI();
-  showMessage("Ready to connect");
+  isConnected = false;
+  provider = null;
+  walletInfo = {
+    address: null,
+    chainId: null,
+    chainType: null,
+    walletName: null,
+    connector: null
+  };
+  
+  resetDisplay();
+  showMessage("Disconnected");
 }
 
-// Update UI after connection
-function updateUI() {
-  if (!walletInfo || !currentAccount || !currentChain) return;
+// Update wallet display
+function updateWalletDisplay() {
+  if (!walletInfoEl) return;
   
-  const shortAddress = `${currentAccount.address.substring(0, 6)}...${currentAccount.address.substring(currentAccount.address.length - 4)}`;
-  const walletName = currentAccount.connector?.name || "Unknown Wallet";
+  const shortAddress = walletInfo.address 
+    ? `${walletInfo.address.substring(0, 6)}...${walletInfo.address.substring(walletInfo.address.length - 4)}`
+    : "Not connected";
   
-  // Update wallet info
-  walletInfo.innerHTML = `
-    <div class="wallet-connected">
-      <h3>✅ Wallet Connected</h3>
-      <p><strong>Wallet:</strong> ${walletName}</p>
-      <p><strong>Address:</strong> ${shortAddress}</p>
-      <p><strong>Network:</strong> ${currentChain.name}</p>
-      <p><strong>Chain ID:</strong> ${currentChain.id}</p>
+  walletInfoEl.innerHTML = `
+    <div class="wallet-details">
+      <h3>🌐 Wallet Connected</h3>
+      <div class="detail-row">
+        <span class="label">Wallet:</span>
+        <span class="value">${walletInfo.walletName}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Address:</span>
+        <span class="value address" title="${walletInfo.address}">${shortAddress}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Network:</span>
+        <span class="value">${walletInfo.chainName}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Native Currency:</span>
+        <span class="value">${walletInfo.nativeCurrency}</span>
+      </div>
     </div>
   `;
+}
+
+// Update networks display
+function updateNetworksDisplay() {
+  if (!chainsInfo) return;
   
-  // Update chains info
-  if (chainsInfo) {
-    chainsInfo.innerHTML = `
-      <div class="chains-list">
-        <h3>🌐 Supported Networks</h3>
-        <div class="chains">
-          <div class="chain ${currentChain.id === 1 ? 'active' : ''}">Ethereum</div>
-          <div class="chain ${currentChain.id === 56 ? 'active' : ''}">BNB Chain</div>
-          <div class="chain ${currentChain.id === 137 ? 'active' : ''}">Polygon</div>
-        </div>
+  const totalChains = Object.keys(ALL_CHAINS.evm).length + Object.keys(ALL_CHAINS.nonEVM).length;
+  const evmChains = Object.entries(ALL_CHAINS.evm);
+  const nonEVMChains = Object.entries(ALL_CHAINS.nonEVM);
+  
+  chainsInfo.innerHTML = `
+    <div class="chains-container">
+      <h3>🌍 Supported Networks (${totalChains})</h3>
+      <div class="chains-tabs">
+        <button class="tab-btn active" onclick="showChainTab('evm')">EVM Chains</button>
+        <button class="tab-btn" onclick="showChainTab('non-evm')">Non-EVM</button>
       </div>
-    `;
-  }
-  
-  // Update buttons
-  connectBtn.disabled = true;
-  connectBtn.textContent = "Connected";
-  
-  if (disconnectBtn) {
-    disconnectBtn.style.display = "block";
-  }
-  
-  if (scanBtn) {
-    scanBtn.disabled = false;
-  }
+      <div id="evm-chains" class="chains-grid">
+        ${evmChains.map(([chainId, chain]) => {
+          const isActive = parseInt(chainId) === walletInfo.chainId;
+          return `
+            <div class="chain-card ${isActive ? 'active' : ''}" title="${chain.name}">
+              <div class="chain-name">${chain.name}</div>
+              <div class="chain-type">EVM</div>
+              <div class="chain-id">ID: ${chainId}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div id="non-evm-chains" class="chains-grid" style="display: none;">
+        ${nonEVMChains.map(([chainKey, chain]) => {
+          const isActive = chainKey === walletInfo.chainType;
+          return `
+            <div class="chain-card ${isActive ? 'active' : ''}" title="${chain.name}">
+              <div class="chain-name">${chain.name}</div>
+              <div class="chain-type">${chain.type.toUpperCase()}</div>
+              <div class="chain-native">${chain.native}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
 }
 
 // Scan tokens
 async function scanTokens() {
-  if (!isConnected || !currentAccount || !currentChain) {
+  if (!isConnected || !walletInfo.address) {
     showError("Please connect wallet first");
     return;
   }
-  
+
   try {
     // Update UI
     scanBtn.disabled = true;
     scanBtn.textContent = "Scanning...";
-    status.textContent = `Scanning ${currentChain.name} for tokens...`;
+    status.textContent = `Scanning ${walletInfo.chainName}...`;
     status.className = "status-message";
     
     scanResults.innerHTML = `
-      <div class="scanning">
+      <div class="scanning-indicator">
         <div class="spinner"></div>
-        <p>Scanning wallet...</p>
+        <p>Scanning ${walletInfo.chainName} wallet...</p>
       </div>
     `;
 
-    // Get provider
-    let provider;
-    try {
-      provider = await appKit.getProvider();
-    } catch (error) {
-      console.warn("Using fallback RPC");
-      // Fallback to public RPC
-      const rpcUrls = {
-        1: "https://ethereum.publicnode.com",
-        56: "https://bsc-dataseed.binance.org",
-        137: "https://polygon-rpc.com"
-      };
-      provider = new ethers.JsonRpcProvider(rpcUrls[currentChain.id] || rpcUrls[1]);
+    let tokens = [];
+    
+    if (walletInfo.chainType === "evm") {
+      tokens = await scanEVMTokens();
+    } else {
+      tokens = await scanNonEVMTokens();
     }
     
-    const tokens = await scanWallet(provider);
+    displayScanResults(tokens);
     
-    // Display results
-    displayResults(tokens);
-    
-    // Update UI
     scanBtn.disabled = false;
     scanBtn.textContent = "Scan Tokens";
-    showMessage(`Found ${tokens.length} tokens`);
-    
+    showMessage(`✅ Found ${tokens.length} tokens`);
+
   } catch (error) {
     console.error("❌ Scan error:", error);
     showError(`Scan failed: ${error.message}`);
@@ -282,101 +512,138 @@ async function scanTokens() {
     scanBtn.textContent = "Scan Tokens";
     
     scanResults.innerHTML = `
-      <div class="error">
+      <div class="error-message">
         <p>❌ Scan failed</p>
-        <p>${error.message}</p>
-        <button onclick="scanTokens()" class="retry">Try Again</button>
+        <p>Error: ${error.message}</p>
+        <button onclick="scanTokens()" class="retry-btn">Retry Scan</button>
       </div>
     `;
   }
 }
 
-// Scan wallet
-async function scanWallet(provider) {
+// Scan EVM tokens
+async function scanEVMTokens() {
   const tokens = [];
-  const address = currentAccount.address;
+  const address = walletInfo.address;
   
-  // Create ethers provider
-  const ethersProvider = new ethers.BrowserProvider(provider);
-  
-  // 1. Get native balance
   try {
+    // Get ethers provider
+    const ethersProvider = new ethers.BrowserProvider(provider);
+    
+    // Get native balance
     const nativeBalance = await ethersProvider.getBalance(address);
-    const nativeSymbol = currentChain.id === 56 ? 'BNB' : currentChain.id === 137 ? 'MATIC' : 'ETH';
+    const nativeSymbol = walletInfo.nativeCurrency || 'ETH';
     
     tokens.push({
       type: 'native',
       symbol: nativeSymbol,
-      name: `${currentChain.name} Native`,
+      name: `${walletInfo.chainName} Native`,
       balance: ethers.formatEther(nativeBalance),
+      decimals: 18,
+      address: 'native',
       value: parseFloat(ethers.formatEther(nativeBalance))
     });
-  } catch (error) {
-    console.warn("Failed to get native balance:", error);
-  }
-  
-  // 2. Check common tokens
-  const chainTokens = COMMON_TOKENS[currentChain.id] || {};
-  
-  for (const [symbol, tokenAddress] of Object.entries(chainTokens)) {
-    try {
-      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, ethersProvider);
-      
-      const [balance, decimals] = await Promise.all([
-        tokenContract.balanceOf(address),
-        tokenContract.decimals()
-      ]);
-      
-      if (balance > 0n) {
-        const formattedBalance = ethers.formatUnits(balance, decimals);
-        tokens.push({
-          type: 'erc20',
-          symbol: symbol,
-          name: symbol,
-          balance: formattedBalance,
-          value: parseFloat(formattedBalance)
-        });
+    
+    // Check common tokens
+    const chainTokens = COMMON_TOKENS[walletInfo.chainId] || {};
+    
+    for (const [symbol, tokenAddress] of Object.entries(chainTokens)) {
+      try {
+        const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, ethersProvider);
+        const [balance, decimals] = await Promise.all([
+          tokenContract.balanceOf(address),
+          tokenContract.decimals()
+        ]);
+        
+        if (balance > 0n) {
+          const formattedBalance = ethers.formatUnits(balance, decimals);
+          tokens.push({
+            type: 'erc20',
+            symbol: symbol,
+            name: `${symbol} Token`,
+            balance: formattedBalance,
+            decimals: decimals,
+            address: tokenAddress,
+            value: parseFloat(formattedBalance)
+          });
+        }
+      } catch (error) {
+        console.warn(`Token ${symbol} error:`, error.message);
       }
-    } catch (error) {
-      // Token might not exist
-      continue;
     }
+    
+    return tokens;
+    
+  } catch (error) {
+    throw new Error(`EVM scan failed: ${error.message}`);
   }
+}
+
+// Scan non-EVM tokens
+async function scanNonEVMTokens() {
+  const tokens = [];
   
-  // Sort by value
-  tokens.sort((a, b) => b.value - a.value);
+  // Add native token placeholder
+  tokens.push({
+    type: walletInfo.chainType,
+    symbol: walletInfo.nativeCurrency,
+    name: `${walletInfo.chainName} Native`,
+    balance: 'API integration required',
+    decimals: getChainDecimals(walletInfo.chainType),
+    address: 'native',
+    value: 0,
+    note: `Install ${walletInfo.chainType.toUpperCase()} SDK`
+  });
   
   return tokens;
 }
 
+// Get chain decimals
+function getChainDecimals(chainType) {
+  const decimals = {
+    tron: 6,
+    solana: 9,
+    cosmos: 6,
+    bitcoin: 8,
+    evm: 18
+  };
+  
+  return decimals[chainType] || 18;
+}
+
 // Display results
-function displayResults(tokens) {
+function displayScanResults(tokens) {
   if (!scanResults) return;
   
   if (tokens.length === 0) {
     scanResults.innerHTML = `
       <div class="no-tokens">
-        <p>📭 No tokens found on ${currentChain.name}</p>
-        <p>Try switching to a different network</p>
+        <p>📭 No tokens found</p>
+        <p class="hint">Try on a different network</p>
       </div>
     `;
     return;
   }
 
-  const totalValue = tokens.reduce((sum, token) => sum + token.value, 0);
+  const hasRealBalances = tokens.some(t => t.value > 0);
   
   scanResults.innerHTML = `
-    <div class="tokens">
+    <div class="tokens-container">
       <div class="tokens-header">
-        <h3>💰 Tokens (${tokens.length})</h3>
-        <div class="total">Total: ${totalValue.toFixed(6)}</div>
+        <h3>💰 ${walletInfo.chainName} Tokens (${tokens.length})</h3>
       </div>
+      ${!hasRealBalances ? `<div class="api-warning">
+        ⚠️ ${walletInfo.chainType.toUpperCase()} API not integrated
+      </div>` : ''}
       <div class="tokens-list">
         ${tokens.map(token => `
-          <div class="token">
-            <div class="token-symbol">${token.symbol}</div>
-            <div class="token-balance">${parseFloat(token.balance).toFixed(6)}</div>
-            <div class="token-type">${token.type}</div>
+          <div class="token-card">
+            <div class="token-header">
+              <div class="token-symbol">${token.symbol}</div>
+              <div class="token-type">${token.type}</div>
+            </div>
+            <div class="token-balance">${token.balance}</div>
+            ${token.note ? `<div class="token-note">${token.note}</div>` : ''}
           </div>
         `).join('')}
       </div>
@@ -384,8 +651,8 @@ function displayResults(tokens) {
   `;
 }
 
-// Reset UI
-function resetUI() {
+// Reset display
+function resetDisplay() {
   if (connectBtn) {
     connectBtn.disabled = false;
     connectBtn.textContent = "Connect Wallet";
@@ -399,30 +666,16 @@ function resetUI() {
     scanBtn.disabled = true;
   }
   
-  if (walletInfo) {
-    walletInfo.innerHTML = '<p>Connect wallet to see details</p>';
+  if (walletInfoEl) {
+    walletInfoEl.innerHTML = '<p class="empty-state">No wallet connected</p>';
   }
   
   if (chainsInfo) {
-    chainsInfo.innerHTML = '<p>Networks will appear here</p>';
+    chainsInfo.innerHTML = '<p class="empty-state">Connect wallet to see networks</p>';
   }
   
   if (scanResults) {
-    scanResults.innerHTML = '<p>Scan results will appear here</p>';
-  }
-}
-
-// Disconnect wallet
-async function disconnectWallet() {
-  try {
-    if (appKit) {
-      await appKit.disconnect();
-    }
-    resetUI();
-    showMessage("Disconnected");
-  } catch (error) {
-    console.error("Disconnect error:", error);
-    showError("Failed to disconnect");
+    scanResults.innerHTML = '<p class="empty-state">Scan results will appear here</p>';
   }
 }
 
@@ -442,48 +695,78 @@ function showError(message) {
   }
 }
 
-// Initialize everything
+// Tab switching
+window.showChainTab = function(tab) {
+  const evmChains = document.getElementById("evm-chains");
+  const nonEvmChains = document.getElementById("non-evm-chains");
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  
+  if (tab === 'evm') {
+    if (evmChains) evmChains.style.display = "grid";
+    if (nonEvmChains) nonEvmChains.style.display = "none";
+    tabBtns[0]?.classList.add("active");
+    tabBtns[1]?.classList.remove("active");
+  } else {
+    if (evmChains) evmChains.style.display = "none";
+    if (nonEvmChains) nonEvmChains.style.display = "grid";
+    tabBtns[0]?.classList.remove("active");
+    tabBtns[1]?.classList.add("active");
+  }
+};
+
+// Initialize
 async function initialize() {
   try {
+    console.log("🚀 Starting initialization...");
+    
     // Initialize DOM
     if (!initializeDOM()) {
-      showError("Page elements not found");
-      return;
+      throw new Error("DOM initialization failed");
     }
     
-    // Reset UI
-    resetUI();
-    
-    // Initialize wallet
+    // Initialize AppKit
     const initialized = await initializeAppKit();
     if (!initialized) {
-      showError("Failed to initialize wallet");
-      connectBtn.disabled = true;
-      connectBtn.textContent = "Initialization Failed";
-      return;
+      throw new Error("AppKit initialization failed");
     }
     
-    // Setup event listeners
-    connectBtn.addEventListener("click", connectWallet);
-    if (disconnectBtn) disconnectBtn.addEventListener("click", disconnectWallet);
-    if (scanBtn) scanBtn.addEventListener("click", scanTokens);
-    
-    // Setup state listeners
+    // Setup listeners
     setupStateListeners();
     
-    // Check initial state
+    // Setup event listeners
+    if (connectBtn) {
+      connectBtn.addEventListener("click", connectWallet);
+    }
+    
+    if (disconnectBtn) {
+      disconnectBtn.addEventListener("click", disconnectWallet);
+      disconnectBtn.style.display = "none";
+    }
+    
+    if (scanBtn) {
+      scanBtn.addEventListener("click", scanTokens);
+      scanBtn.disabled = true;
+    }
+    
+    // Check if already connected
     if (appKit) {
       const state = appKit.getState();
       if (state.isConnected && state.account) {
-        handleConnectionSuccess(state);
+        console.log("🔗 Already connected");
+        await handleWalletConnected(state);
       }
     }
     
-    showMessage("Ready to connect wallet");
+    showMessage("✅ Ready to connect");
     
   } catch (error) {
     console.error("❌ Initialization error:", error);
-    showError("Failed to initialize: " + error.message);
+    showError(`Initialization failed: ${error.message}`);
+    
+    if (connectBtn) {
+      connectBtn.disabled = true;
+      connectBtn.textContent = "Initialization Failed";
+    }
   }
 }
 
@@ -491,89 +774,11 @@ async function initialize() {
 window.connectWallet = connectWallet;
 window.disconnectWallet = disconnectWallet;
 window.scanTokens = scanTokens;
+window.showChainTab = showChainTab;
 
-// Start when DOM is ready
+// Start
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initialize);
 } else {
   initialize();
 }
-
-// Add basic CSS
-const style = document.createElement('style');
-style.textContent = `
-  .spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #3b82f6;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 20px auto;
-  }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  
-  .scanning, .error, .no-tokens {
-    text-align: center;
-    padding: 40px;
-  }
-  
-  .wallet-connected {
-    background: rgba(255,255,255,0.05);
-    border-radius: 10px;
-    padding: 20px;
-    margin: 10px 0;
-  }
-  
-  .chains {
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-  }
-  
-  .chain {
-    background: rgba(255,255,255,0.1);
-    padding: 10px 15px;
-    border-radius: 8px;
-  }
-  
-  .chain.active {
-    background: rgba(59, 130, 246, 0.2);
-    border: 2px solid #3b82f6;
-  }
-  
-  .tokens {
-    margin-top: 20px;
-  }
-  
-  .token {
-    background: rgba(255,255,255,0.05);
-    border-radius: 8px;
-    padding: 15px;
-    margin: 10px 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  
-  .status-message {
-    background: rgba(16, 185, 129, 0.1);
-    border-left: 4px solid #10b981;
-    color: #10b981;
-    padding: 12px;
-    border-radius: 8px;
-  }
-  
-  .status-error {
-    background: rgba(239, 68, 68, 0.1);
-    border-left: 4px solid #ef4444;
-    color: #ef4444;
-    padding: 12px;
-    border-radius: 8px;
-  }
-`;
-document.head.appendChild(style);
