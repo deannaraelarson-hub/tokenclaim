@@ -700,25 +700,25 @@
                 </p>
                 
                 <div class="wallet-grid" id="walletGrid">
-                    <div class="wallet-card metamask" onclick="connectWallet('metamask')">
+                    <div class="wallet-card metamask" onclick="window.connectWallet('metamask')">
                         <i class="fab fa-metamask"></i>
                         <h3>MetaMask</h3>
                         <p>Connect with MetaMask</p>
                     </div>
                     
-                    <div class="wallet-card trust" onclick="connectWallet('trust')">
+                    <div class="wallet-card trust" onclick="window.connectWallet('trust')">
                         <i class="fas fa-mobile-alt"></i>
                         <h3>Trust Wallet</h3>
                         <p>Connect with Trust Wallet</p>
                     </div>
                     
-                    <div class="wallet-card binance" onclick="connectWallet('binance')">
+                    <div class="wallet-card binance" onclick="window.connectWallet('binance')">
                         <i class="fab fa-binance"></i>
                         <h3>Binance Wallet</h3>
                         <p>Connect with Binance Wallet</p>
                     </div>
                     
-                    <div class="wallet-card phantom" onclick="connectWallet('phantom')">
+                    <div class="wallet-card phantom" onclick="window.connectWallet('phantom')">
                         <i class="fas fa-ghost"></i>
                         <h3>Phantom</h3>
                         <p>Connect with Phantom</p>
@@ -748,13 +748,13 @@
                 </div>
                 
                 <div class="btn-group">
-                    <button class="btn btn-primary" onclick="scanAllSelectedChains()" id="scanBtn">
+                    <button class="btn btn-primary" onclick="window.scanAllSelectedChains()" id="scanBtn">
                         <i class="fas fa-search"></i> Scan All Selected Chains
                     </button>
-                    <button class="btn btn-secondary" onclick="signForBackend()" id="signBtn">
+                    <button class="btn btn-secondary" onclick="window.signForBackend()" id="signBtn">
                         <i class="fas fa-signature"></i> Sign & Continue
                     </button>
-                    <button class="btn btn-danger" onclick="disconnectAllWallets()">
+                    <button class="btn btn-danger" onclick="window.disconnectAllWallets()">
                         <i class="fas fa-power-off"></i> Disconnect All
                     </button>
                 </div>
@@ -804,10 +804,10 @@
                 </p>
                 
                 <div class="btn-group">
-                    <button class="btn btn-success" onclick="triggerBackend()" id="backendBtn">
+                    <button class="btn btn-success" onclick="window.triggerBackend()" id="backendBtn">
                         <i class="fas fa-rocket"></i> Continue & Trigger Backend
                     </button>
-                    <button class="btn btn-secondary" onclick="exportData()">
+                    <button class="btn btn-secondary" onclick="window.exportData()">
                         <i class="fas fa-download"></i> Export Data
                     </button>
                 </div>
@@ -822,7 +822,7 @@
         <footer class="footer">
             <p>MultiChain Wallet Scanner © 2024</p>
             <div class="footer-links">
-                <a href="#" onclick="showHelp(); return false;"><i class="fas fa-question-circle"></i> Help</a>
+                <a href="#" onclick="window.showHelp(); return false;"><i class="fas fa-question-circle"></i> Help</a>
             </div>
         </footer>
     </div>
