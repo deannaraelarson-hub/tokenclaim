@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MultiChain Wallet Scanner — AppKit + Ethers</title>
+  <title>MultiChain Wallet Scanner — AppKit</title>
   <style>
-    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 16px; background:#0f172a; color:#e6eef8; }
-    .card { background:#0b1220; padding:16px; border-radius:8px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); margin-bottom:12px; }
-    button { background:#2563eb; color:white; padding:8px 12px; border-radius:6px; border:none; cursor:pointer; }
-    button.secondary { background:#0ea5a4 }
-    #walletsList .wallet-chip { display:flex; align-items:center; justify-content:space-between; padding:8px; margin:6px 0; background:#071233; border-radius:6px; }
+    :root { --bg:#081026; --card:#071233; --muted:#94a3b8; --accent:#2563eb; color-scheme: dark; }
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 16px; background:var(--bg); color:#e6eef8; }
+    .card { background:var(--card); padding:16px; border-radius:8px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); margin-bottom:12px; }
+    button { background:var(--accent); color:white; padding:8px 12px; border-radius:6px; border:none; cursor:pointer; }
+    button.secondary { background:#0ea5a4; }
+    #walletsList .wallet-chip { display:flex; align-items:center; justify-content:space-between; padding:8px; margin:6px 0; background:#061029; border-radius:6px; }
     table { width:100%; border-collapse:collapse; margin-top:8px; }
     th,td { padding:8px; border-bottom:1px solid rgba(255,255,255,0.04); text-align:left; font-size:13px }
     #toastContainer { position:fixed; right:16px; top:16px; z-index:2000; display:flex; flex-direction:column; gap:8px; }
@@ -17,42 +18,39 @@
     .hidden{display:none}
     #loadingOverlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(2,6,23,0.6); z-index:1000 }
     #loadingText{ background:#071233; padding:12px 16px; border-radius:8px; }
+    .small { font-size:13px; color:var(--muted) }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>MultiChain Wallet Scanner (AppKit + Ethers)</h2>
-    <p>Use the modal to select any wallet (AppKit handles many mobile & desktop wallets). After connect the scanner will enumerate native + common tokens across major chains and return results.</p>
-    <div style="display:flex; gap:8px; align-items:center">
-      <button id="connectBtn">Open Wallet Modal (AppKit)</button>
+    <h2>MultiChain Wallet Scanner (AppKit)</h2>
+    <p class="small">Open the wallet modal, pick a wallet. The scanner will enumerate native balances and common tokens across major EVM chains. Use the Sign & Trigger buttons to authorize and send data to your backend.</p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+      <button id="connectBtn">Open Wallet Modal</button>
       <button id="scanAllBtn" class="secondary">Scan All Connected</button>
       <button id="signBtn">Sign & Authorize</button>
       <button id="backendBtn">Trigger Backend</button>
-      <div id="status" style="margin-left:12px;color:#94a3b8">Not connected</div>
+      <div id="status" style="margin-left:12px;color:var(--muted)">Not connected</div>
     </div>
   </div>
 
   <div class="card">
     <h3>Connected Wallets</h3>
-    <div id="walletsList"><p>No wallets connected</p></div>
+    <div id="walletsList"><p class="small">No wallets connected</p></div>
   </div>
 
   <div class="card">
     <h3>Tokens (All wallets)</h3>
     <div id="totalValue">Total Value: $0.00</div>
     <table>
-      <thead><tr><th>Symbol</th><th>Balance</th><th>Price</th><th>Value</th><th>Chain</th><th>Address (token)</th></tr></thead>
-      <tbody id="tokensBody"><tr><td colspan="6">No tokens yet</td></tr></tbody>
+      <thead><tr><th>Symbol</th><th>Balance</th><th>Price</th><th>Value</th><th>Chain</th><th>Token Address</th></tr></thead>
+      <tbody id="tokensBody"><tr><td colspan="6" class="small">No tokens yet</td></tr></tbody>
     </table>
   </div>
 
-  <div id="toastContainer"></div>
-
+  <div id="toastContainer" aria-live="polite"></div>
   <div id="loadingOverlay"><div id="loadingText">Loading...</div></div>
 
-  <!-- Main module -->
-  <script type="module" src="./main.js"></script>
+  <script type="module" src="/main.js"></script>
 </body>
 </html>
-```
-
