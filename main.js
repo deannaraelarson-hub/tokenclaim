@@ -1,14 +1,13 @@
-```javascript
-// main.js — AppKit + ethers multi-chain scanner (package imports for Vite/Rollup build)
-// Ensure packages are installed in your project: @reown/appkit, @reown/appkit-adapter-ethers, ethers
+// main.js — AppKit + ethers multi-chain scanner (DOM-safe, avoids large template literals)
+// Use package imports (install dependencies: @reown/appkit, @reown/appkit-adapter-ethers, ethers)
+// This file is safe to build with Vite (no JSX, no ambiguous template literals).
+
 import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { ethers } from "ethers";
 
-// Your projectId (keep your existing value)
 const projectId = "962425907914a3e80a7d8e7288b23f62";
 
-// Configuration (chains, price endpoints)
 const CONFIG = {
   EVM_CHAINS: [
     { id: 1, name: "Ethereum", rpc: "https://cloudflare-eth.com", symbol: "ETH", cgPlatform: "ethereum" },
@@ -26,7 +25,7 @@ const CONFIG = {
   RPC_CONCURRENCY: 6
 };
 
-// Initialize AppKit (modal, adapters)
+// create AppKit
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   projectId,
@@ -41,7 +40,7 @@ const appKit = createAppKit({
   features: { analytics: false }
 });
 
-// UI hooks
+// DOM refs
 const connectBtn = document.getElementById("connectBtn");
 const scanAllBtn = document.getElementById("scanAllBtn");
 const signBtn = document.getElementById("signBtn");
@@ -54,32 +53,37 @@ const toastContainer = document.getElementById("toastContainer");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const loadingText = document.getElementById("loadingText");
 
-// App state
+// local state
 const state = {
-  wallets: [], // { address, provider: ethers.Provider, signer, name, walletType, scanResults }
+  wallets: [],
   tokenlist: null
 };
 
 // UI helpers
-function toast(msg, type = "info") {
-  if (!toastContainer) return console.log(`[${type}]`, msg);
-  const d = document.createElement("div");
-  d.className = "toast " + type;
-  d.innerText = msg;
+function addToast(message) {
+  if (!toastContainer) return console.log('[toast]', message);
+  const d = document.createElement('div');
+  d.className = 'toast';
+  d.textContent = message;
   toastContainer.appendChild(d);
-  setTimeout(() => d.remove(), 5000);
+  setTimeout(()=> d.remove(), 4500);
 }
-function showLoading(msg = "Loading...") { if (loadingText) loadingText.textContent = msg; if (loadingOverlay) loadingOverlay.style.display = "flex"; }
-function hideLoading() { if (loadingOverlay) loadingOverlay.style.display = "none"; }
-function shortAddr(a){ return a ? `${a.slice(0,6)}...${a.slice(-4)}` : ""; }
-function formatNum(n){ return Number(n).toLocaleString(undefined, { maximumFractionDigits: 6 }); }
+function showLoading(msg = 'Loading...') {
+  if (loadingText) loadingText.textContent = msg;
+  if (loadingOverlay) loadingOverlay.style.display = 'flex';
+}
+function hideLoading() {
+  if (loadingOverlay) loadingOverlay.style.display = 'none';
+}
+function shortAddr(a){ return a ? `${a.slice(0,6)}...${a.slice(-4)}` : ''; }
+function fmtNum(n){ return Number(n).toLocaleString(undefined, { maximumFractionDigits: 6 }); }
 
-// Price fetch with CORS fallback
-async function fetchWithCorsFallback(url) {
+// Price helpers with CORS fallback
+async function fetchWithProxy(url) {
   try {
-    const r = await fetch(url, { mode: "cors" });
+    const r = await fetch(url, { mode: 'cors' });
     if (r.ok) return r;
-  } catch (e) { /* try proxy next */ }
+  } catch (e) {}
   try {
     const proxy = CONFIG.PRICE_CORS_PROXY + encodeURIComponent(url);
     const r2 = await fetch(proxy);
@@ -87,25 +91,22 @@ async function fetchWithCorsFallback(url) {
   } catch (e) {}
   return null;
 }
-async function getCoinPrice(coinId) {
-  if (!coinId) return null;
-  const url = `${CONFIG.PRICE_API_BASE}/simple/price?ids=${encodeURIComponent(coinId)}&vs_currencies=usd`;
-  const resp = await fetchWithCorsFallback(url);
-  if (!resp) return null;
-  const j = await resp.json();
-  return j?.[coinId]?.usd ?? null;
+async function coinPriceById(id) {
+  if (!id) return null;
+  const u = `${CONFIG.PRICE_API_BASE}/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`;
+  const r = await fetchWithProxy(u);
+  if (!r) return null;
+  try { const j = await r.json(); return j?.[id]?.usd ?? null; } catch { return null; }
 }
-async function getContractTokenPrice(contractAddress, platformId) {
+async function contractPrice(contractAddress, platformId) {
   if (!contractAddress || !platformId) return null;
-  const url = `${CONFIG.PRICE_API_BASE}/simple/token_price/${platformId}?contract_addresses=${encodeURIComponent(contractAddress)}&vs_currencies=usd`;
-  const resp = await fetchWithCorsFallback(url);
-  if (!resp) return null;
-  const j = await resp.json();
-  const key = Object.keys(j || {})[0];
-  return key ? j[key]?.usd ?? null : null;
+  const u = `${CONFIG.PRICE_API_BASE}/simple/token_price/${platformId}?contract_addresses=${encodeURIComponent(contractAddress)}&vs_currencies=usd`;
+  const r = await fetchWithProxy(u);
+  if (!r) return null;
+  try { const j = await r.json(); const k = Object.keys(j||{})[0]; return k ? j[k]?.usd ?? null : null; } catch { return null; }
 }
 
-// Tokenlist loader (cached)
+// tokenlist loader (cached)
 async function loadTokenList() {
   if (state.tokenlist) return state.tokenlist;
   try {
@@ -114,7 +115,7 @@ async function loadTokenList() {
     const j = await r.json();
     state.tokenlist = (j.tokens || []).map(t => ({
       chainId: t.chainId,
-      address: (t.address || "").toLowerCase(),
+      address: (t.address||'').toLowerCase(),
       symbol: t.symbol,
       name: t.name,
       decimals: t.decimals || 18
@@ -126,57 +127,60 @@ async function loadTokenList() {
   }
 }
 
-// Common tokens (quick discovery)
+// common tokens to ensure USDT/USDC/WBTC etc are checked
 function commonTokens(chainId) {
   const map = {
     1: [
-      { address: "0xdac17f958d2ee523a2206206994597c13d831ec7", symbol: "USDT", decimals: 6 },
-      { address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", symbol: "USDC", decimals: 6 },
-      { address: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", symbol: "WBTC", decimals: 8 }
+      { address:'0xdac17f958d2ee523a2206206994597c13d831ec7', symbol:'USDT', decimals:6 },
+      { address:'0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', symbol:'USDC', decimals:6 },
+      { address:'0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', symbol:'WBTC', decimals:8 }
     ],
     56: [
-      { address: "0x55d398326f99059ff775485246999027b3197955", symbol: "USDT", decimals: 18 },
-      { address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", symbol: "USDC", decimals: 18 },
-      { address: "0xe9e7cea3dedca5984780bafc599bd69add087d56", symbol: "BUSD", decimals: 18 }
+      { address:'0x55d398326f99059ff775485246999027b3197955', symbol:'USDT', decimals:18 },
+      { address:'0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', symbol:'USDC', decimals:18 },
+      { address:'0xe9e7cea3dedca5984780bafc599bd69add087d56', symbol:'BUSD', decimals:18 }
     ],
     137: [
-      { address: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", symbol: "USDT", decimals: 6 },
-      { address: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", symbol: "USDC", decimals: 6 }
+      { address:'0xc2132d05d31c914a87c6611c10748aeb04b58e8f', symbol:'USDT', decimals:6 },
+      { address:'0x2791bca1f2de4661ed88a30c99a7a9449aa84174', symbol:'USDC', decimals:6 }
     ]
   };
   return map[chainId] || [];
 }
 
-// Scan routine using ethers JSON-RPC provider per chain
-const ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"];
+// scanner using ethers JSON-RPC per chain
+const ERC20_ABI = ["function balanceOf(address) view returns (uint256)","function decimals() view returns (uint8)"];
 
-async function scanWithProvider(ethersProvider, address) {
-  const out = { walletAddress: address, chainBalances: [], allTokens: [], totalValue: 0, timestamp: Date.now() };
+async function scanProviderBalances(ethersProvider, address) {
   await loadTokenList();
+  const out = { walletAddress: address, chainBalances: [], allTokens: [], totalValue: 0, timestamp: Date.now() };
 
   for (const chain of CONFIG.EVM_CHAINS) {
     try {
-      const rpcProvider = new ethers.providers.JsonRpcProvider(chain.rpc);
-      const nativeRaw = await rpcProvider.getBalance(address).catch(()=> ethers.BigNumber.from(0));
-      const nativeBal = Number(ethers.utils.formatEther(nativeRaw));
-      const coinPrice = (await getCoinPrice(chain.cgPlatform).catch(()=> null)) ?? defaultPrice(chain.symbol);
-      const nativeValue = nativeBal * coinPrice;
+      const rpc = chain.rpc;
+      const rpcProvider = new ethers.providers.JsonRpcProvider(rpc);
+      const raw = await rpcProvider.getBalance(address).catch(()=> ethers.BigNumber.from(0));
+      const nativeBal = Number(ethers.utils.formatEther(raw));
+      let nativePrice = await coinPriceById(chain.cgPlatform).catch(()=> null);
+      if (nativePrice == null) nativePrice = defaultPrice(chain.symbol);
+      const nativeVal = nativeBal * nativePrice;
+
       const chainResult = {
         chain,
-        nativeBalance: { symbol: chain.symbol, balance: Number(nativeBal.toFixed(6)), price: coinPrice, value: nativeValue },
+        nativeBalance: { symbol: chain.symbol, balance: Number(nativeBal.toFixed(6)), price: nativePrice, value: nativeVal },
         tokens: [],
-        totalValue: nativeValue
+        totalValue: nativeVal
       };
 
-      // candidates: common tokens + tokenlist filtered (limited)
-      const candidates = commonTokens(chain.id).map(t => ({...t}));
+      // build candidate tokens
+      const candidates = commonTokens(chain.id).map(t => ({...t, address: (t.address||'').toLowerCase()}));
       const listForChain = (state.tokenlist || []).filter(t => t.chainId === chain.id).slice(0, CONFIG.TOKEN_SCAN_LIMIT);
       for (const t of listForChain) {
         if (!candidates.some(c => c.address === t.address)) candidates.push({ address: t.address, symbol: t.symbol, decimals: t.decimals || 18, name: t.name });
       }
       const toCheck = candidates.slice(0, CONFIG.TOKEN_SCAN_LIMIT);
 
-      // concurrent token checks
+      // concurrency token checks
       let idx = 0;
       const found = [];
       const worker = async () => {
@@ -191,11 +195,11 @@ async function scanWithProvider(ethersProvider, address) {
             const decimals = tk.decimals || await contract.decimals().catch(()=>18);
             const balance = Number(ethers.utils.formatUnits(balRaw, decimals));
             if (balance <= 0) continue;
-            // price resolution: contract -> symbol -> fallback
-            let price = await getContractTokenPrice(tk.address, chain.cgPlatform).catch(()=> null);
+            // price resolution
+            let price = await contractPrice(tk.address, chain.cgPlatform).catch(()=> null);
             if (price == null) {
               const coinId = symbolToCoinId(tk.symbol);
-              price = coinId ? (await getCoinPrice(coinId).catch(()=> null)) : null;
+              price = coinId ? (await coinPriceById(coinId).catch(()=> null)) : null;
             }
             if (price == null) price = defaultPrice(tk.symbol);
             const value = balance * (price || 0);
@@ -211,7 +215,7 @@ async function scanWithProvider(ethersProvider, address) {
               type: 'erc20'
             });
           } catch (e) {
-            // per-token ignore
+            // ignore
           }
         }
       };
@@ -221,25 +225,25 @@ async function scanWithProvider(ethersProvider, address) {
       for (let w=0; w<concurrency; w++) workers.push(worker());
       await Promise.all(workers);
 
-      found.sort((a,b) => (b.value || 0) - (a.value || 0));
+      found.sort((a,b)=> (b.value || 0) - (a.value || 0));
       chainResult.tokens = found;
-      chainResult.totalValue += found.reduce((s,t)=> s + (t.value||0), 0);
+      chainResult.totalValue += found.reduce((s,t) => s + (t.value||0), 0);
 
       out.chainBalances.push(chainResult);
       out.allTokens.push({
-        address: "native",
+        address: 'native',
         symbol: chain.symbol,
         name: `${chain.name} Native`,
         balance: chainResult.nativeBalance.balance,
         price: chainResult.nativeBalance.price,
         value: chainResult.nativeBalance.value,
         chain: chain.name,
-        type: "native"
+        type: 'native'
       });
       if (found.length) out.allTokens.push(...found);
 
     } catch (err) {
-      console.warn("chain scan error", chain.name, err);
+      console.warn('scan error', chain.name, err);
     }
     await new Promise(r => setTimeout(r, 250));
   }
@@ -257,192 +261,200 @@ function defaultPrice(sym) {
   return map[(sym||'').toUpperCase()] || 0;
 }
 
-// AppKit UI flow
-connectBtn.addEventListener("click", async () => {
+// AppKit flow
+connectBtn.addEventListener('click', async () => {
   try {
     await appKit.open();
   } catch (err) {
-    console.error("AppKit open failed:", err);
-    toast("Wallet modal failed to open", "error");
+    console.error('appKit.open error', err);
+    addToast('Wallet modal failed to open');
   }
 });
 
-// Subscribe to AppKit state changes
+// subscribe to state and handle connection
 appKit.subscribeState(async (s) => {
   try {
     if (!s) return;
     if (s.isConnected) {
-      // Obtain provider via multiple fallbacks
       let rawProvider = s.provider || s.connector?.provider || null;
-      try { if (!rawProvider && appKit.getProvider) rawProvider = await appKit.getProvider(); } catch (e) {}
+      try { if (!rawProvider && appKit.getProvider) rawProvider = await appKit.getProvider(); } catch (_) {}
       if (!rawProvider && window.ethereum) rawProvider = window.ethereum;
-
-      if (!rawProvider) {
-        toast("Connected but provider not available", "warning");
-        return;
-      }
+      if (!rawProvider) { addToast('Connected but provider not accessible'); return; }
 
       const ethersProvider = new ethers.providers.Web3Provider(rawProvider);
       const signer = ethersProvider.getSigner();
       let address = null;
-      try { address = await signer.getAddress(); } catch (e) { address = s.account || s.accounts?.[0] || s.address || null; }
-      if (!address) {
-        toast("Connected but failed to read address", "error");
-        return;
-      }
+      try { address = await signer.getAddress(); } catch (_) { address = s.account || s.accounts?.[0] || s.address || null; }
+      if (!address) { addToast('Connected but address not readable'); return; }
 
-      const walletEntry = {
+      const entry = {
         address,
         provider: ethersProvider,
         signer,
-        name: s.name || s.walletName || "Connected Wallet",
-        walletType: s.walletType || "appkit",
+        name: s.name || s.walletName || 'Connected Wallet',
+        walletType: s.walletType || 'appkit',
         scanResults: null
       };
 
       const idx = state.wallets.findIndex(w => w.address.toLowerCase() === address.toLowerCase());
-      if (idx !== -1) state.wallets[idx] = walletEntry; else state.wallets.push(walletEntry);
+      if (idx !== -1) state.wallets[idx] = entry; else state.wallets.push(entry);
 
-      renderWalletsUI();
-      toast(`Connected: ${shortAddr(address)}`, "success");
+      renderWalletsDOM();
+      addToast(`Connected: ${shortAddr(address)}`);
 
       // auto-scan
-      showLoading("Auto-scanning connected wallet...");
+      showLoading('Auto-scanning wallet...');
       try {
-        const scanResults = await scanWithProvider(ethersProvider, address);
+        const res = await scanProviderBalances(ethersProvider, address);
         const j = state.wallets.findIndex(w => w.address.toLowerCase() === address.toLowerCase());
-        if (j !== -1) state.wallets[j].scanResults = scanResults;
-        renderTokensUI();
-        toast("Auto-scan complete", "success");
+        if (j !== -1) state.wallets[j].scanResults = res;
+        renderTokensDOM();
+        addToast('Auto-scan complete');
       } catch (scanErr) {
-        console.error("Auto-scan failed:", scanErr);
-        toast("Auto-scan failed: " + (scanErr.message || scanErr), "warning");
-      } finally {
-        hideLoading();
-      }
+        console.error('auto-scan error', scanErr);
+        addToast('Auto-scan failed');
+      } finally { hideLoading(); }
     }
-  } catch (err) {
-    console.error("subscribeState handler error:", err);
+  } catch (e) {
+    console.error('subscribeState handler error', e);
   }
 });
 
-// Render functions (separate names to avoid collisions with earlier attempts)
-function renderWalletsUI() {
+// DOM rendering via element creation (no template literals)
+function renderWalletsDOM() {
   if (!walletsListEl) return;
-  if (state.wallets.length === 0) { walletsListEl.innerHTML = '<p class="muted">No wallets connected</p>'; statusEl.textContent = "Not connected"; return; }
+  walletsListEl.innerHTML = '';
+  if (state.wallets.length === 0) {
+    const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'No wallets connected';
+    walletsListEl.appendChild(p);
+    statusEl.textContent = 'Not connected';
+    return;
+  }
   statusEl.textContent = `${state.wallets.length} wallet(s) connected`;
-  walletsListEl.innerHTML = state.wallets.map(w => `
-    <div class="wallet-chip">
-      <div><strong>${w.name}</strong><div class="muted">${shortAddr(w.address)}</div></div>
-      <div style="display:flex; gap:8px;">
-        <button onclick="window.rescanWallet('${w.address}')">Rescan</button>
-        <button onclick="window.disconnectWallet('${w.address}')">Disconnect</button>
-      </div>
-    </div>
-  `).join("");
+  for (const w of state.wallets) {
+    const chip = document.createElement('div'); chip.className = 'wallet-chip';
+    const left = document.createElement('div');
+    const strong = document.createElement('strong'); strong.textContent = w.name;
+    const addr = document.createElement('div'); addr.className = 'muted'; addr.textContent = shortAddr(w.address);
+    left.appendChild(strong); left.appendChild(addr);
+    const right = document.createElement('div'); right.style.display = 'flex'; right.style.gap = '8px';
+    const rescanBtn = document.createElement('button'); rescanBtn.textContent = 'Rescan';
+    rescanBtn.addEventListener('click', () => window.rescanWallet(w.address));
+    const disconnectBtn = document.createElement('button'); disconnectBtn.textContent = 'Disconnect';
+    disconnectBtn.addEventListener('click', () => window.disconnectWallet(w.address));
+    right.appendChild(rescanBtn); right.appendChild(disconnectBtn);
+    chip.appendChild(left); chip.appendChild(right);
+    walletsListEl.appendChild(chip);
+  }
 }
 
-function renderTokensUI() {
+function renderTokensDOM() {
   if (!tokensBodyEl) return;
+  tokensBodyEl.innerHTML = '';
   const all = [];
-  state.wallets.forEach(w => { if (w.scanResults?.allTokens) all.push(...w.scanResults.allTokens); });
-  if (all.length === 0) { tokensBodyEl.innerHTML = '<tr><td colspan="6" class="muted">No tokens found</td></tr>'; totalValueEl.textContent = 'Total Value: $0.00'; return; }
+  for (const w of state.wallets) {
+    if (w.scanResults?.allTokens) all.push(...w.scanResults.allTokens);
+  }
+  if (all.length === 0) {
+    const row = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 6; td.className = 'muted'; td.textContent = 'No tokens found'; row.appendChild(td); tokensBodyEl.appendChild(row);
+    totalValueEl.textContent = 'Total Value: $0.00'; return;
+  }
   all.sort((a,b) => (b.value || 0) - (a.value || 0));
-  tokensBodyEl.innerHTML = all.map(t => `
-    <tr>
-      <td>${t.symbol}</td>
-      <td>${formatNum(t.balance)}</td>
-      <td>$${(t.price || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
-      <td>$${(t.value || 0).toFixed(2)}</td>
-      <td>${t.chain}</td>
-      <td style="font-size:12px;color:#94a3b8">${t.address === 'native' ? '-' : t.address}</td>
-    </tr>
-  `).join("");
+  for (const t of all) {
+    const tr = document.createElement('tr');
+    const tdSymbol = document.createElement('td'); tdSymbol.textContent = t.symbol;
+    const tdBal = document.createElement('td'); tdBal.textContent = fmtNum(t.balance);
+    const tdPrice = document.createElement('td'); tdPrice.textContent = `$${(t.price || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
+    const tdVal = document.createElement('td'); tdVal.textContent = `$${(t.value || 0).toFixed(2)}`;
+    const tdChain = document.createElement('td'); tdChain.textContent = t.chain;
+    const tdAddr = document.createElement('td'); tdAddr.style.fontSize = '12px'; tdAddr.style.color = '#94a3b8'; tdAddr.textContent = t.address === 'native' ? '-' : t.address;
+    tr.appendChild(tdSymbol); tr.appendChild(tdBal); tr.appendChild(tdPrice); tr.appendChild(tdVal); tr.appendChild(tdChain); tr.appendChild(tdAddr);
+    tokensBodyEl.appendChild(tr);
+  }
   const total = all.reduce((s,t) => s + (t.value || 0), 0);
   totalValueEl.textContent = `Total Value: $${total.toFixed(2)}`;
 }
 
-// global helpers used by UI
+// global functions for UI buttons
 window.rescanWallet = async (address) => {
   const w = state.wallets.find(x => x.address.toLowerCase() === address.toLowerCase());
-  if (!w) return toast("Wallet not found", "warning");
-  showLoading("Rescanning wallet...");
+  if (!w) { addToast('Wallet not found'); return; }
+  showLoading('Rescanning wallet...');
   try {
-    const res = await scanWithProvider(w.provider, w.address);
+    const res = await scanProviderBalances(w.provider, w.address);
     w.scanResults = res;
-    renderTokensUI();
-    toast("Rescan complete", "success");
+    renderTokensDOM();
+    addToast('Rescan complete');
   } catch (e) {
-    console.error("Rescan failed:", e);
-    toast("Rescan failed: " + (e.message || e), "error");
+    console.error('rescan failed', e);
+    addToast('Rescan failed');
   } finally { hideLoading(); }
 };
 
 window.disconnectWallet = async (address) => {
   try { if (appKit.disconnect) await appKit.disconnect(); } catch (e) {}
   state.wallets = state.wallets.filter(w => w.address.toLowerCase() !== address.toLowerCase());
-  renderWalletsUI();
-  renderTokensUI();
-  toast("Wallet disconnected", "info");
+  renderWalletsDOM();
+  renderTokensDOM();
+  addToast('Wallet disconnected');
 };
 
-// Button handlers
-scanAllBtn.addEventListener("click", async () => {
-  if (!state.wallets.length) return toast("No wallets connected", "warning");
-  showLoading("Scanning all connected wallets...");
+// buttons
+scanAllBtn.addEventListener('click', async () => {
+  if (!state.wallets.length) { addToast('No wallets connected'); return; }
+  showLoading('Scanning all wallets...');
   try {
     for (const w of state.wallets) {
-      const res = await scanWithProvider(w.provider, w.address);
+      const res = await scanProviderBalances(w.provider, w.address);
       w.scanResults = res;
     }
-    renderTokensUI();
-    toast("All wallets scanned", "success");
+    renderTokensDOM();
+    addToast('All wallets scanned');
   } catch (e) {
-    console.error("Scan all failed:", e);
-    toast("Scan all failed: " + (e.message || e), "error");
+    console.error('scan all failed', e);
+    addToast('Scan all failed');
   } finally { hideLoading(); }
 });
 
-signBtn.addEventListener("click", async () => {
-  if (!state.wallets.length) return toast("No wallets to sign", "warning");
-  showLoading("Signing messages...");
+signBtn.addEventListener('click', async () => {
+  if (!state.wallets.length) { addToast('No wallets to sign'); return; }
+  showLoading('Signing messages...');
   try {
     for (const w of state.wallets) {
       try {
         if (!w.signer) w.signer = w.provider.getSigner();
-        const message = `Authorize MultiChain Scanner\nAddress: ${w.address}\nTimestamp: ${Date.now()}\nNonce:${Math.random().toString(36).slice(2,10)}`;
-        const signature = await w.signer.signMessage(message);
-        console.log("Signature", w.address, signature);
-        toast(`Signed: ${shortAddr(w.address)}`, "success");
+        const msg = `Authorize MultiChain Scanner\nAddress: ${w.address}\nTimestamp: ${Date.now()}\nNonce:${Math.random().toString(36).slice(2,10)}`;
+        const sig = await w.signer.signMessage(msg);
+        console.log('Signature', w.address, sig);
+        addToast(`Signed: ${shortAddr(w.address)}`);
       } catch (e) {
-        console.warn("Sign failed for", w.address, e);
-        toast(`Sign failed: ${shortAddr(w.address)}`, "warning");
+        console.warn('sign failed', e);
+        addToast(`Sign failed for ${shortAddr(w.address)}`);
       }
     }
   } finally { hideLoading(); }
 });
 
-backendBtn.addEventListener("click", async () => {
-  if (!state.wallets.length) return toast("No wallets", "warning");
-  showLoading("Preparing backend payload...");
+backendBtn.addEventListener('click', async () => {
+  if (!state.wallets.length) { addToast('No wallets'); return; }
+  showLoading('Preparing backend payload...');
   try {
     const payload = state.wallets.map(w => ({ address: w.address, walletType: w.walletType, scanResults: w.scanResults }));
-    console.log("Backend payload:", payload);
-    // TODO: POST to backend here
-    await new Promise(r => setTimeout(r, 800));
-    toast("Backend processed (simulated)", "success");
+    console.log('Backend payload:', payload);
+    // send to backend here (example commented)
+    // await fetch('/api/process', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    await new Promise(r => setTimeout(r, 700));
+    addToast('Backend processed (simulated)');
   } catch (e) {
-    toast("Backend trigger failed: " + (e.message || e), "error");
+    console.error('backend failed', e);
+    addToast('Backend failed');
   } finally { hideLoading(); }
 });
 
-// Warm tokenlist on startup
+// warm tokenlist
 (async function init() {
-  showLoading("Warming tokenlist...");
+  showLoading('Warming tokenlist...');
   await loadTokenList().catch(()=>{});
   hideLoading();
-  toast('Ready. Click "Open Wallet Modal" to connect a wallet.', "info");
+  addToast('Ready — open the wallet modal to connect.');
 })();
-
-// export for debugging if needed
-export { appKit };
