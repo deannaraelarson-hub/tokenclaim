@@ -646,7 +646,7 @@ const UI = {
             <div class="wallet-chip" style="background: ${wallet.color}">
                 <i class="${wallet.icon}"></i>
                 ${wallet.name}: ${this.formatAddress(wallet.address)}
-                <button class="remove" onclick="disconnectWallet('${wallet.address}')">
+                <button class="remove" onclick="window.disconnectWallet('${wallet.address}')">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -670,7 +670,7 @@ const UI = {
             chainsList.innerHTML += `
                 <label class="chain-checkbox">
                     <input type="checkbox" ${isSelected ? 'checked' : ''} 
-                           onchange="toggleChain(${chain.id})">
+                           onchange="window.toggleChain(${chain.id})">
                     ${chain.name} (${chain.symbol})
                 </label>
             `;
@@ -682,7 +682,7 @@ const UI = {
             chainsList.innerHTML += `
                 <label class="chain-checkbox">
                     <input type="checkbox" ${isSelected ? 'checked' : ''} 
-                           onchange="toggleChain('${chain.id}')">
+                           onchange="window.toggleChain('${chain.id}')">
                     ${chain.name} (${chain.symbol})
                 </label>
             `;
@@ -704,7 +704,7 @@ const UI = {
                         <span class="wallet-address">${this.formatAddress(wallet.address)}</span>
                     </div>
                     <div class="wallet-actions">
-                        <button class="btn btn-secondary" onclick="rescanWallet('${wallet.address}')">
+                        <button class="btn btn-secondary" onclick="window.rescanWallet('${wallet.address}')">
                             <i class="fas fa-sync-alt"></i> Rescan All Chains
                         </button>
                     </div>
