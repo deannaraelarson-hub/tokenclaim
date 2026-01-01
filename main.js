@@ -1,24 +1,14 @@
-// main.js — AppKit primary with tested fallback to WalletConnect v1 (npm) then injected
-// Install required packages before building:
-//   npm install @reown/appkit @reown/appkit-adapter-ethers ethers @walletconnect/web3-provider
-//
-// Build with Vite as you already do.
-//
-// Flow:
-// 1) Test WalletConnect v2 relay WS connectivity
-// 2) If OK -> open AppKit modal and wait for provider
-// 3) If not OK or timed out -> instantiate WalletConnect v1 (bridge) and enable
-// 4) If that fails -> fall back to injected window.ethereum
-//
-// UI expectations: your HTML should include elements with IDs:
-// connectBtn, retryWcv1Btn (optional), status, toastContainer, loadingOverlay, loadingText,
-// walletsList, tokensBody, totalValue, scanAllBtn, signBtn, backendBtn
-//
-// The scanner (native + ERC20) uses ethers and JSON-RPC per chain (CoinGecko price fallback included)
+/* main.js — AppKit primary with tested fallback to WalletConnect v1 (npm) then injected
+   Notes:
+   - Attempts dynamic ESM import of @walletconnect/web3-provider first (bundled if installed).
+   - If that fails at runtime (or package not installed), falls back to loading the UMD from unpkg.
+   - AppKit (WalletConnect v2) is used first when the relay is reachable; v1 is only used as a fallback.
+   - Install packages (optional if you prefer bundling):
+       npm install @reown/appkit @reown/appkit-adapter-ethers ethers @walletconnect/web3-provider
+*/
 
 import { createAppKit } from "@reown/appkit";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
-import WalletConnectProvider from "@walletconnect/web3-provider";
 import { ethers } from "ethers";
 
 const PROJECT_ID = "962425907914a3e80a7d8e7288b23f62";
@@ -40,7 +30,7 @@ const CONFIG = {
   RPC_PARALLEL: 6
 };
 
-// AppKit
+// AppKit (WalletConnect v2)
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   projectId: PROJECT_ID,
@@ -53,7 +43,7 @@ const appKit = createAppKit({
 // DOM helpers
 const $ = id => document.getElementById(id);
 const connectBtn = $("connectBtn");
-const retryWcv1Btn = $("retryWcv1Btn"); // optional button to regenerate QR if you add it
+const retryWcv1Btn = $("retryWcv1Btn");
 const statusEl = $("status");
 const toastContainer = $("toastContainer");
 const loadingOverlay = $("loadingOverlay");
@@ -128,7 +118,7 @@ async function loadTokenlist() {
 
 // scanner (ethers JSON-RPC)
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"];
-async function scanWithEthersProvider(provider, address) {
+async function scanWithEthersProvider(providerOrRpc, address) {
   await loadTokenlist().catch(()=>{});
   const result = { wallet: address, chainBalances: [], allTokens: [], totalValue: 0, ts: Date.now() };
 
@@ -144,7 +134,6 @@ async function scanWithEthersProvider(provider, address) {
 
       // candidates: pick up some tokens from tokenlist (bounded)
       const candidates = (state.tokenlist || []).filter(t => t.chainId === chain.id).slice(0, CONFIG.TOKEN_SCAN_LIMIT);
-      // optionally add a small hardcoded list if you want reliability
 
       // concurrency scanning
       let idx = 0;
@@ -195,6 +184,40 @@ async function scanWithEthersProvider(provider, address) {
   return result;
 }
 
+// Try to load WalletConnect v1 provider constructor:
+// 1) dynamic ESM import (works if package is installed and bundler includes it)
+// 2) fallback to loading UMD from CDN and reading window.WalletConnectProvider
+async function loadWalletConnectV1Ctor() {
+  // First try ESM dynamic import (bundled if present)
+  try {
+    const mod = await import(/* webpackIgnore: true */ "@walletconnect/web3-provider");
+    return mod?.default || mod;
+  } catch (esmErr) {
+    console.warn("ESM import of @walletconnect/web3-provider failed, will try UMD CDN fallback:", esmErr);
+  }
+
+  // If already present on window, return it
+  if (window.WalletConnectProvider) return window.WalletConnectProvider;
+
+  // UMD CDN fallback (unpkg)
+  const umdUrl = "https://unpkg.com/@walletconnect/web3-provider/dist/umd/index.min.js";
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = umdUrl;
+    s.async = true;
+    s.onload = () => {
+      // small delay to ensure global is assigned
+      setTimeout(() => {
+        if (window.WalletConnectProvider) resolve();
+        else reject(new Error("UMD loaded but WalletConnectProvider not found on window"));
+      }, 10);
+    };
+    s.onerror = (e) => reject(new Error("Failed to load WalletConnect v1 UMD: " + e));
+    document.head.appendChild(s);
+  });
+  return window.WalletConnectProvider;
+}
+
 // Test if WalletConnect v2 relay is reachable from this page
 function testRelayWs(url, timeout = CONFIG.WC2_TEST_TIMEOUT_MS) {
   return new Promise((resolve) => {
@@ -212,7 +235,7 @@ function testRelayWs(url, timeout = CONFIG.WC2_TEST_TIMEOUT_MS) {
 
 // Connect flow:
 //  - If relay reachable -> try AppKit -> wait for appKit.getProvider(timeout)
-//  - Else try WalletConnect v1 (npm package) fallback (enable -> returns provider)
+//  - Else try WalletConnect v1 (UMD or ESM) fallback (enable -> returns provider)
 //  - Else injected provider
 async function connectHandler() {
   showLoading("Checking WalletConnect v2 relay...");
@@ -253,14 +276,16 @@ async function connectHandler() {
       toast("WalletConnect v2 relay not reachable from your browser - using fallback", "warning");
     }
 
-    // Attempt WalletConnect v1 (bridge) using npm package
+    // Attempt WalletConnect v1 (bridge) using dynamic loader (avoids bundler resolution problems)
     showLoading("Initializing WalletConnect v1 (bridge)...");
     try {
+      const WCProviderCtor = await loadWalletConnectV1Ctor();
+      if (!WCProviderCtor) throw new Error("WalletConnect v1 constructor unavailable");
       // build rpc map for wc1
       const rpc = {}; CONFIG.CHAINS.forEach(c => rpc[c.id] = c.rpc);
-      const wc1 = new WalletConnectProvider({ bridge: "https://bridge.walletconnect.org", rpc, qrcode: true });
+      const wc1 = new WCProviderCtor({ bridge: "https://bridge.walletconnect.org", rpc, qrcode: true });
       // Enable: will show QR or deep-link
-      const enablePromise = wc1.enable();
+      const enablePromise = wc1.enable ? wc1.enable() : (wc1.request ? wc1.request({ method: "eth_requestAccounts" }) : Promise.reject(new Error("wc1 provider enable not available")));
       const enableResult = await Promise.race([enablePromise, new Promise((_, rej) => setTimeout(()=> rej(new Error("WCv1 enable timeout")), CONFIG.WC1_ENABLE_TIMEOUT_MS))]);
       if (!enableResult) throw new Error("WCv1 enable failed");
       state.wc1Instance = wc1;
